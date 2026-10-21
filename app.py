@@ -33,160 +33,88 @@ PREP = ROOT.parent / "brain age prep and meth" / "T1 preprocessed v2"
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Brain Age Lab",
-    page_icon="🧠",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # ---------------------------------------------------------------------------
-# Global CSS
+# Global CSS (kept short; colours and base font come from .streamlit/config.toml)
 # ---------------------------------------------------------------------------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
-.stApp {
-    background: radial-gradient(ellipse at 20% 10%, #0d1e3a 0%, #080f1c 60%, #050a14 100%);
-    color: #e2e8f0;
-}
+.block-container { padding-top: 2.4rem; max-width: 1320px; }
 [data-testid="stHeader"] { background: transparent; }
-[data-testid="stSidebar"] { background: #07101f; }
+hr { margin: 1.4rem 0; border-color: #E1E3E6; }
 
-/* Hero banner */
-.hero {
-    padding: 2rem 2.4rem;
-    border: 1px solid rgba(125,211,252,0.18);
-    border-radius: 20px;
-    background: linear-gradient(130deg, rgba(15,30,60,0.95) 0%, rgba(10,22,45,0.95) 100%);
-    backdrop-filter: blur(12px);
-    margin-bottom: 1.6rem;
-    position: relative;
-    overflow: hidden;
-}
-.hero::before {
-    content: '';
-    position: absolute;
-    top: -60px; right: -80px;
-    width: 260px; height: 260px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(99,179,237,0.12) 0%, transparent 70%);
-    pointer-events: none;
-}
-.eyebrow {
-    font-size: .72rem;
-    letter-spacing: .18em;
-    color: #7dd3fc;
-    font-weight: 700;
-    text-transform: uppercase;
-    margin-bottom: .4rem;
-}
-.hero h1 {
-    margin: 0 0 .5rem 0;
-    font-size: 2.6rem;
-    font-weight: 800;
-    background: linear-gradient(135deg, #f0f9ff 30%, #7dd3fc 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-.hero p { color: #94a3b8; margin-bottom: 0; font-size: .97rem; }
+/* Page header */
+.hero { padding-bottom: 1rem; margin-bottom: 1.2rem; border-bottom: 1px solid #D5D8DC; }
+.eyebrow { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: #6B7178; }
+.hero h1 { margin: .2rem 0 .4rem 0; padding: 0; font-size: 1.75rem; font-weight: 600; color: #1F2328; }
+.hero p { margin: 0; color: #4A4F55; font-size: .95rem; max-width: 62rem; }
 
-/* Metric cards */
-div[data-testid="stMetric"] {
-    background: linear-gradient(135deg, #0f1e38 0%, #0a1628 100%);
-    padding: 1.1rem 1.3rem;
-    border: 1px solid rgba(125,211,252,0.15);
-    border-radius: 16px;
-    transition: border-color .2s, transform .15s;
-}
-div[data-testid="stMetric"]:hover {
-    border-color: rgba(125,211,252,0.4);
-    transform: translateY(-2px);
-}
-div[data-testid="stMetricValue"] {
-    font-size: 1.7rem !important;
-    font-weight: 700 !important;
-}
+/* Layer label and section headings */
+.layer-badge { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase;
+               color: #6B7178; margin: .4rem 0 1rem 0; }
+.section-header { font-size: .98rem; font-weight: 600; color: #1F2328;
+                  padding-bottom: .35rem; margin-bottom: .8rem; border-bottom: 1px solid #D5D8DC; }
 
-/* Section headers */
-.section-header {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: #bfdbfe;
-    letter-spacing: .04em;
-    margin-bottom: .6rem;
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-}
-.section-header::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: linear-gradient(90deg, rgba(125,211,252,0.25) 0%, transparent 100%);
-}
+/* Metrics: plain, no card */
+div[data-testid="stMetric"] { padding: .2rem 0 .6rem 0; }
+div[data-testid="stMetricLabel"] p { font-size: .8rem; color: #6B7178; }
+div[data-testid="stMetricValue"] { font-size: 1.5rem !important; font-weight: 600 !important; }
+div[data-testid="stMetricDelta"] { color: #6B7178 !important; font-size: .8rem; }
 
-/* Layer badges */
-.layer-badge {
-    display: inline-block;
-    padding: .25rem .7rem;
-    border-radius: 999px;
-    font-size: .7rem;
-    font-weight: 700;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    margin-bottom: .8rem;
-}
-.l1 { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.3); }
-.l2 { background: rgba(99,179,237,0.15); color: #63b3ed; border: 1px solid rgba(99,179,237,0.3); }
-.l3 { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
-.l4 { background: rgba(167,139,250,0.15); color: #a78bfa; border: 1px solid rgba(167,139,250,0.3); }
+.stMarkdown code { color: #2F5D7C; background: #F0F2F4; }
 
-/* Info box */
-.info-box {
-    background: rgba(15,30,60,0.6);
-    border: 1px solid rgba(125,211,252,0.12);
-    border-radius: 12px;
-    padding: .8rem 1rem;
-    font-size: .84rem;
-    color: #94a3b8;
-    margin-top: .6rem;
-}
+/* Notes, key-value rows */
+.info-box { border-left: 2px solid #C5C9CE; padding: .15rem 0 .15rem .85rem; margin-top: .6rem;
+            font-size: .88rem; line-height: 1.6; color: #3A3F45; }
+.kv { display: flex; justify-content: space-between; padding: .28rem 0; border-bottom: 1px solid #E1E3E6; }
+.kv span:first-child { color: #6B7178; font-size: .84rem; }
+.kv span:last-child { font-weight: 600; font-size: .86rem; color: #1F2328; }
+.bag-box { text-align: center; padding: 1.1rem; border: 1px solid #D5D8DC; border-radius: 3px; }
+.bag-box .lbl { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: #6B7178; margin-bottom: .35rem; }
+.bag-box .val { font-size: 2rem; font-weight: 600; }
+.bag-box .sub { font-size: .82rem; color: #6B7178; margin-top: .35rem; }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # Matplotlib defaults
 # ---------------------------------------------------------------------------
+INK     = "#1F2328"
+MUTED   = "#6B7178"
+RULE    = "#B8BCC2"
+ACCENT  = "#2F5D7C"   # single accent
+ACCENT2 = "#7A8087"   # neutral grey for secondary series
+POS_CLR = "#B5533C"   # muted red   (older-looking / positive gap)
+NEG_CLR = "#4F7F5A"   # muted green (younger-looking / negative gap)
+AMBER   = "#8A6D1F"
+# Sequential single-hue colormap for |error| (light = small, dark = large)
+SEQ_CMAP = matplotlib.colors.ListedColormap(
+    matplotlib.colormaps["Blues"](np.linspace(0.3, 1.0, 256))
+)
+
 plt.rcParams.update({
-    "figure.facecolor":  "#0a1628",
-    "axes.facecolor":    "#0a1628",
-    "axes.edgecolor":    "#1e3a5f",
-    "axes.labelcolor":   "#94a3b8",
-    "xtick.color":       "#64748b",
-    "ytick.color":       "#64748b",
-    "text.color":        "#e2e8f0",
-    "grid.color":        "#1e3a5f",
+    "figure.facecolor":  "white",
+    "axes.facecolor":    "white",
+    "axes.edgecolor":    RULE,
+    "axes.labelcolor":   INK,
+    "axes.titlecolor":   INK,
+    "xtick.color":       MUTED,
+    "ytick.color":       MUTED,
+    "text.color":        INK,
+    "grid.color":        "#E3E5E8",
     "grid.linewidth":    0.6,
     "font.family":       "sans-serif",
     "font.size":         9.5,
 })
 
-ACCENT  = "#7dd3fc"
-ACCENT2 = "#a78bfa"
-POS_CLR = "#f87171"
-NEG_CLR = "#34d399"
-
 
 def styled_fig(w=7, h=4.5):
     fig, ax = plt.subplots(figsize=(w, h))
-    fig.patch.set_facecolor("#0a1628")
-    ax.set_facecolor("#0a1628")
     ax.spines[["top", "right"]].set_visible(False)
-    ax.spines[["left", "bottom"]].set_color("#1e3a5f")
+    ax.spines[["left", "bottom"]].set_color(RULE)
     return fig, ax
 
 
@@ -203,7 +131,7 @@ def fmt(v, d=2):
 st.markdown("""
 <div class="hero">
   <div class="eyebrow">Deep Learning · Structural MRI · OASIS-3</div>
-  <h1>🧠 Brain Age Lab</h1>
+  <h1>Brain Age Lab</h1>
   <p>
     An interactive research demo of the V3 SFCN brain-age model trained on OASIS-3.
     Navigate the four layers: <b>MRI Viewer</b> → <b>Prediction</b> →
@@ -276,10 +204,10 @@ def get_model():
 # TABS
 # ===========================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🔬 Layer 1 · MRI Viewer",
-    "⚡ Layer 2 · Prediction",
-    "📊 Layer 3 · Brain Age Gap",
-    "🔭 Layer 4 · Performance",
+    "Layer 1 · MRI Viewer",
+    "Layer 2 · Prediction",
+    "Layer 3 · Brain Age Gap",
+    "Layer 4 · Performance",
 ])
 
 
@@ -288,7 +216,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ===========================================================================
 with tab1:
     st.markdown(
-        '<div class="layer-badge l1">Layer 1 — MRI Viewer &amp; Scan Selection</div>',
+        '<div class="layer-badge">Layer 1 — MRI Viewer &amp; Scan Selection</div>',
         unsafe_allow_html=True,
     )
 
@@ -302,7 +230,7 @@ with tab1:
 
         with col_sel:
             st.markdown(
-                '<div class="section-header">📂 Select Scan</div>',
+                '<div class="section-header">Select Scan</div>',
                 unsafe_allow_html=True,
             )
 
@@ -346,10 +274,10 @@ with tab1:
             )
             scan = filtered_cat[chosen_idx]
 
-            # Metadata card
+            # Metadata
             st.markdown("---")
             st.markdown(
-                '<div class="section-header">🪪 Scan Metadata</div>',
+                '<div class="section-header">Scan Metadata</div>',
                 unsafe_allow_html=True,
             )
             meta_items = [
@@ -363,18 +291,14 @@ with tab1:
             ]
             for k, v in meta_items:
                 st.markdown(
-                    f'<div style="display:flex;justify-content:space-between;'
-                    f'padding:.22rem 0;border-bottom:1px solid #1e3a5f;">'
-                    f'<span style="color:#64748b;font-size:.83rem;">{k}</span>'
-                    f'<span style="font-weight:600;font-size:.85rem;color:#e2e8f0;">{v}</span>'
-                    f'</div>',
+                    f'<div class="kv"><span>{k}</span><span>{v}</span></div>',
                     unsafe_allow_html=True,
                 )
 
             # Upload override
             st.markdown("---")
             st.markdown(
-                '<div class="section-header">📤 Upload Your NPZ</div>',
+                '<div class="section-header">Upload Your NPZ</div>',
                 unsafe_allow_html=True,
             )
             uploaded = st.file_uploader(
@@ -427,7 +351,7 @@ with tab1:
 
             if volume is not None:
                 st.markdown(
-                    '<div class="section-header">🖼 Orthogonal Slice Viewer</div>',
+                    '<div class="section-header">Orthogonal Slice Viewer</div>',
                     unsafe_allow_html=True,
                 )
 
@@ -441,7 +365,6 @@ with tab1:
 
                 # constrained_layout avoids tight_layout + GridSpec warnings
                 fig = plt.figure(figsize=(13, 4.4), constrained_layout=True)
-                fig.patch.set_facecolor("#0a1628")
                 gs  = gridspec.GridSpec(1, 3, figure=fig, wspace=0.06)
 
                 view_data = [
@@ -454,29 +377,25 @@ with tab1:
                     ax_v.imshow(slc, cmap="gray", interpolation="bilinear", aspect="auto")
                     ax_v.set_title(
                         f"{title}  ({coord})",
-                        color="#bfdbfe", fontsize=10, fontweight="bold", pad=6,
+                        color=INK, fontsize=10, fontweight="medium", pad=6,
                     )
                     ax_v.axis("off")
-                    for spine in ax_v.spines.values():
-                        spine.set_visible(True)
-                        spine.set_edgecolor(ACCENT)
-                        spine.set_linewidth(1.2)
 
                 st.pyplot(fig, clear_figure=True)
 
                 # Intensity profile
                 with st.expander(
-                    "📈 Intensity profile (centre row, axial slice)", expanded=False
+                    "Intensity profile (centre row, axial slice)", expanded=False
                 ):
                     mid_row = volume[:, sy // 2, axi_idx]
                     fig2, ax2 = styled_fig(11, 2.4)
-                    ax2.plot(mid_row, color=ACCENT, linewidth=1.2, alpha=0.85)
+                    ax2.plot(mid_row, color=ACCENT, linewidth=1.2)
                     ax2.fill_between(
-                        range(len(mid_row)), mid_row, alpha=0.18, color=ACCENT
+                        range(len(mid_row)), mid_row, alpha=0.12, color=ACCENT
                     )
                     ax2.set_xlabel("Voxel index (X)")
                     ax2.set_ylabel("Intensity (z-score)")
-                    ax2.grid(True, alpha=0.3)
+                    ax2.grid(True)
                     fig2.tight_layout()
                     st.pyplot(fig2, clear_figure=True)
 
@@ -487,7 +406,7 @@ with tab1:
 
                 if volume_source == "upload":
                     st.info(
-                        "📤 Showing **uploaded** volume. "
+                        "Showing **uploaded** volume. "
                         "Go to **Layer 2** to run inference."
                     )
                 else:
@@ -502,7 +421,7 @@ with tab1:
 # ===========================================================================
 with tab2:
     st.markdown(
-        '<div class="layer-badge l2">Layer 2 — Real-time Brain Age Prediction</div>',
+        '<div class="layer-badge">Layer 2 — Real-time Brain Age Prediction</div>',
         unsafe_allow_html=True,
     )
 
@@ -510,7 +429,7 @@ with tab2:
 
     with col_info2:
         st.markdown(
-            '<div class="section-header">🤖 Model Info</div>',
+            '<div class="section-header">Model Info</div>',
             unsafe_allow_html=True,
         )
         st.markdown("""
@@ -525,7 +444,7 @@ with tab2:
 """, unsafe_allow_html=True)
 
         st.markdown(
-            '<div class="section-header" style="margin-top:1.2rem;">📌 Active Scan</div>',
+            '<div class="section-header" style="margin-top:1.4rem;">Active Scan</div>',
             unsafe_allow_html=True,
         )
         if "_scan" in st.session_state:
@@ -544,7 +463,7 @@ with tab2:
 
     with col_pred2:
         st.markdown(
-            '<div class="section-header">⚡ Run Inference</div>',
+            '<div class="section-header">Run Inference</div>',
             unsafe_allow_html=True,
         )
 
@@ -557,13 +476,13 @@ with tab2:
             st.warning("No volume loaded — select a scan in **Layer 1** first.")
         else:
             st.markdown(
-                f'<p style="color:#64748b;font-size:.88rem;">Volume shape: '
+                f'<p style="color:#6B7178;font-size:.88rem;">Volume shape: '
                 f'<code>{st.session_state["_volume"].shape}</code></p>',
                 unsafe_allow_html=True,
             )
 
         predict_btn = st.button(
-            "🧠  Predict Brain Age",
+            "Predict Brain Age",
             type="primary",
             use_container_width=True,
             disabled=not volume_ready,
@@ -586,17 +505,17 @@ with tab2:
             elapsed  = st.session_state["_elapsed"]
             pred_age = result["predicted_age"]
 
-            st.success("✅ Inference complete")
+            st.success("Inference complete")
 
             r1, r2, r3 = st.columns(3)
-            r1.metric("🧠 Predicted Brain Age", f"{pred_age:.1f} y")
-            r2.metric("⏱ Inference Latency",   f"{elapsed:.2f} s")
-            r3.metric("📌 Checkpoint",          result.get("checkpoint", "m1_f0_s0"))
+            r1.metric("Predicted Brain Age", f"{pred_age:.1f} y")
+            r2.metric("Inference Latency",   f"{elapsed:.2f} s")
+            r3.metric("Checkpoint",          result.get("checkpoint", "m1_f0_s0"))
 
             # Illustrative probability distribution
             st.markdown(
-                '<div class="section-header" style="margin-top:1rem;">'
-                '📊 Model Confidence Visualization</div>',
+                '<div class="section-header" style="margin-top:1.2rem;">'
+                'Model Confidence Visualization</div>',
                 unsafe_allow_html=True,
             )
             bins_data = json.loads(
@@ -615,29 +534,29 @@ with tab2:
             fig3, ax3 = styled_fig(10, 3.2)
             ax3.bar(
                 centers, pseudo_probs,
-                width=bin_step * 0.85, color=ACCENT, alpha=0.65,
+                width=bin_step * 0.85, color=ACCENT, alpha=0.45,
                 label="Probability mass",
             )
             ax3.axvline(
-                pred_age, color=POS_CLR, linewidth=2, linestyle="--",
+                pred_age, color=POS_CLR, linewidth=1.8, linestyle="--",
                 label=f"Predicted: {pred_age:.1f} y",
             )
             if "_scan" in st.session_state:
                 chron = st.session_state["_scan"]["age"]
                 if not np.isnan(chron):
                     ax3.axvline(
-                        chron, color=NEG_CLR, linewidth=2, linestyle=":",
+                        chron, color=NEG_CLR, linewidth=1.8, linestyle=":",
                         label=f"Chronological: {chron:.1f} y",
                     )
             ax3.set_xlabel("Age (years)")
             ax3.set_ylabel("Probability mass")
-            ax3.legend(framealpha=0, labelcolor="#e2e8f0", fontsize=9)
-            ax3.grid(True, alpha=0.25)
+            ax3.legend(frameon=False, fontsize=9)
+            ax3.grid(True, alpha=0.6)
             fig3.tight_layout()
             st.pyplot(fig3, clear_figure=True)
 
             st.caption(
-                "ℹ️ The distribution above is an illustrative Gaussian centred on the model's "
+                "The distribution above is an illustrative Gaussian centred on the model's "
                 "predicted expected age. The actual SFCN head outputs 64 discrete softmax bins."
             )
 
@@ -649,7 +568,7 @@ with tab2:
 # ===========================================================================
 with tab3:
     st.markdown(
-        '<div class="layer-badge l3">Layer 3 — Brain Age Gap &amp; Error Analysis</div>',
+        '<div class="layer-badge">Layer 3 — Brain Age Gap &amp; Error Analysis</div>',
         unsafe_allow_html=True,
     )
 
@@ -657,7 +576,7 @@ with tab3:
 
     with left3:
         st.markdown(
-            '<div class="section-header">🎯 BAG for Selected Scan</div>',
+            '<div class="section-header">BAG for Selected Scan</div>',
             unsafe_allow_html=True,
         )
 
@@ -675,35 +594,31 @@ with tab3:
                 bag_sign = "+" if bag_val >= 0 else ""
 
                 if bag_val > 0.5:
-                    bag_cls, interp_col = "color:#f87171", "#f87171"
+                    bag_col = interp_col = POS_CLR
                     interp_text = (
-                        "⬆️ Predicted older than chronological age — brain may appear "
+                        "Predicted older than chronological age — brain may appear "
                         "more aged than peers of the same age."
                     )
                 elif bag_val < -0.5:
-                    bag_cls, interp_col = "color:#34d399", "#34d399"
+                    bag_col = interp_col = NEG_CLR
                     interp_text = (
-                        "⬇️ Predicted younger than chronological age — brain may appear "
+                        "Predicted younger than chronological age — brain may appear "
                         "less aged than peers of the same age."
                     )
                 else:
-                    bag_cls, interp_col = "color:#fbbf24", "#fbbf24"
+                    bag_col = interp_col = AMBER
                     interp_text = (
-                        "↔️ Predicted age is close to chronological age — within "
+                        "Predicted age is close to chronological age — within "
                         "expected model variation."
                     )
 
                 st.markdown(
-                    f'<div style="text-align:center;padding:1.2rem;'
-                    f'background:rgba(15,30,60,0.6);'
-                    f'border:1px solid rgba(125,211,252,0.15);border-radius:16px;">'
-                    f'<div style="font-size:.75rem;letter-spacing:.1em;color:#64748b;'
-                    f'text-transform:uppercase;margin-bottom:.4rem;">Brain Age Gap (BAG)</div>'
-                    f'<div style="font-size:2.2rem;font-weight:700;{bag_cls}">'
+                    f'<div class="bag-box">'
+                    f'<div class="lbl">Brain Age Gap (BAG)</div>'
+                    f'<div class="val" style="color:{bag_col};">'
                     f'{bag_sign}{bag_val:.2f} years</div>'
-                    f'<div style="font-size:.8rem;color:#64748b;margin-top:.4rem;">'
-                    f'Absolute error: '
-                    f'<b style="color:#e2e8f0;">{abs_err:.2f} y</b></div>'
+                    f'<div class="sub">Absolute error: '
+                    f'<b style="color:#1F2328;">{abs_err:.2f} y</b></div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -714,13 +629,13 @@ with tab3:
 
                 st.markdown(
                     f'<div class="info-box" '
-                    f'style="border-left:3px solid {interp_col};margin-top:.8rem;">'
+                    f'style="border-left-color:{interp_col};margin-top:.8rem;">'
                     f'{interp_text}</div>',
                     unsafe_allow_html=True,
                 )
 
                 st.warning(
-                    "⚠️ **Disclaimer**: BAG is a model-derived research estimate, "
+                    "**Disclaimer**: BAG is a model-derived research estimate, "
                     "not a clinical diagnosis. Positive or negative gaps reflect model "
                     "uncertainty and training distribution effects — not brain pathology."
                 )
@@ -735,7 +650,7 @@ with tab3:
 
     with right3:
         st.markdown(
-            '<div class="section-header">🔄 Compare Multiple Scans</div>',
+            '<div class="section-header">Compare Multiple Scans</div>',
             unsafe_allow_html=True,
         )
         st.caption(
@@ -769,8 +684,8 @@ with tab3:
             bag_arr = compare_df["BAG_computed"].values
             colors4 = [POS_CLR if b > 0 else NEG_CLR for b in bag_arr]
 
-            ax4.bar(xs, bag_arr, color=colors4, alpha=0.8, width=0.6)
-            ax4.axhline(0, color=ACCENT, linewidth=1, linestyle="--")
+            ax4.bar(xs, bag_arr, color=colors4, alpha=0.9, width=0.6)
+            ax4.axhline(0, color=INK, linewidth=0.8)
             ax4.set_xticks(xs)
             ax4.set_xticklabels(
                 labels4, rotation=40, ha="right", fontsize=7.5
@@ -778,9 +693,10 @@ with tab3:
             ax4.set_ylabel("Brain Age Gap (years)")
             ax4.set_title(
                 "BAG per Scan  (red = older-looking, green = younger-looking)",
-                fontsize=10,
+                fontsize=10, loc="left",
             )
-            ax4.grid(axis="y", alpha=0.3)
+            ax4.grid(axis="y")
+            ax4.set_axisbelow(True)
             fig4.tight_layout()
             st.pyplot(fig4, clear_figure=True)
 
@@ -802,18 +718,22 @@ with tab3:
 # ===========================================================================
 with tab4:
     st.markdown(
-        '<div class="layer-badge l4">Layer 4 — Research Performance Explorer</div>',
+        '<div class="layer-badge">Layer 4 — Research Performance Explorer</div>',
         unsafe_allow_html=True,
     )
 
-    # Key metrics banner
+    # Key metrics
     st.markdown(
         '<div class="section-header">'
-        '📐 V3 Evaluation Metrics (held-out cross-validation)</div>',
+        'V3 Evaluation Metrics (held-out cross-validation)</div>',
         unsafe_allow_html=True,
     )
 
-    m1c, m2c, m3c, m4c, m5c, m6c, m7c = st.columns(7)
+    # Two rows (4 + 3) so labels stay legible on laptop-width screens.
+    mrow1 = st.columns(4)
+    mrow2 = st.columns(4)
+    m1c, m2c, m3c, m4c = mrow1
+    m5c, m6c, m7c      = mrow2[:3]
     m1c.metric(
         "Bias-corr. MAE",
         f"{metrics['MAE']:.2f} y",
@@ -843,63 +763,62 @@ with tab4:
     # Predicted vs actual
     with lcol4:
         st.markdown(
-            '<div class="section-header">🎯 Predicted vs Chronological Age</div>',
+            '<div class="section-header">Predicted vs Chronological Age</div>',
             unsafe_allow_html=True,
         )
         fig5, ax5 = styled_fig(6.4, 4.6)
         sc = ax5.scatter(
             plot_df["age"], plot_df["predicted_age"],
-            s=8, alpha=0.45,
-            c=err_vals.abs(), cmap="plasma", vmin=0, vmax=12,
+            s=8, alpha=0.5,
+            c=err_vals.abs(), cmap=SEQ_CMAP, vmin=0, vmax=12,
         )
         lo4 = float(min(plot_df["age"].min(), plot_df["predicted_age"].min()))
         hi4 = float(max(plot_df["age"].max(), plot_df["predicted_age"].max()))
         ax5.plot(
             [lo4, hi4], [lo4, hi4], "--",
-            color=ACCENT, linewidth=1.5, label="Perfect prediction",
+            color=INK, linewidth=1.0, label="Perfect prediction",
         )
         cb = fig5.colorbar(sc, ax=ax5, shrink=0.8, pad=0.02)
-        cb.set_label("|Error| (years)", color="#94a3b8", fontsize=8)
-        plt.setp(cb.ax.yaxis.get_ticklabels(), color="#94a3b8", fontsize=7.5)
+        cb.set_label("|Error| (years)", color=MUTED, fontsize=8)
+        cb.outline.set_visible(False)
+        plt.setp(cb.ax.yaxis.get_ticklabels(), color=MUTED, fontsize=7.5)
 
         if "_pred_age" in st.session_state and "_scan" in st.session_state:
             s4  = st.session_state["_scan"]
             pa4 = st.session_state["_pred_age"]
             if not np.isnan(s4["age"]):
                 ax5.scatter(
-                    [s4["age"]], [pa4], s=140, color=POS_CLR,
+                    [s4["age"]], [pa4], s=120, color=POS_CLR,
                     zorder=5, marker="*", label="Selected scan",
                 )
 
-        ax5.legend(framealpha=0, labelcolor="#e2e8f0", fontsize=8.5)
+        ax5.legend(frameon=False, fontsize=8.5)
         ax5.set_xlabel("Chronological Age (years)")
         ax5.set_ylabel("Predicted Age (years)")
-        ax5.grid(True, alpha=0.25)
+        ax5.grid(True)
+        ax5.set_axisbelow(True)
         fig5.tight_layout()
         st.pyplot(fig5, clear_figure=True)
 
     # Error distribution
     with rcol4:
         st.markdown(
-            '<div class="section-header">📉 Prediction Error Distribution</div>',
+            '<div class="section-header">Prediction Error Distribution</div>',
             unsafe_allow_html=True,
         )
         fig6, ax6 = styled_fig(6.4, 4.6)
-        n6, bins6, patches6 = ax6.hist(err_vals, bins=40, edgecolor="#0a1628", linewidth=0.3)
-        norm6 = matplotlib.colors.Normalize(vmin=bins6[0], vmax=bins6[-1])
-        cmap6 = matplotlib.colormaps["coolwarm"]
-        for patch6, left6 in zip(patches6, bins6[:-1]):
-            patch6.set_facecolor(cmap6(norm6(left6)))
-            patch6.set_alpha(0.8)
-        ax6.axvline(0, color=ACCENT, linewidth=2, linestyle="--", label="Zero error")
+        ax6.hist(err_vals, bins=40, color=ACCENT, alpha=0.75,
+                 edgecolor="white", linewidth=0.4)
+        ax6.axvline(0, color=INK, linewidth=1.2, linestyle="--", label="Zero error")
         ax6.axvline(
-            err_vals.mean(), color="#fbbf24", linewidth=1.5, linestyle=":",
+            err_vals.mean(), color=POS_CLR, linewidth=1.4, linestyle=":",
             label=f"Mean: {err_vals.mean():.2f} y",
         )
         ax6.set_xlabel("Predicted − Chronological Age (years)")
         ax6.set_ylabel("Scan count")
-        ax6.legend(framealpha=0, labelcolor="#e2e8f0", fontsize=8.5)
-        ax6.grid(axis="y", alpha=0.25)
+        ax6.legend(frameon=False, fontsize=8.5)
+        ax6.grid(axis="y")
+        ax6.set_axisbelow(True)
         fig6.tight_layout()
         st.pyplot(fig6, clear_figure=True)
 
@@ -909,7 +828,7 @@ with tab4:
     # MAE by age group
     with b1col:
         st.markdown(
-            '<div class="section-header">📊 MAE by Age Group</div>',
+            '<div class="section-header">MAE by Age Group</div>',
             unsafe_allow_html=True,
         )
         bands4 = [
@@ -936,29 +855,28 @@ with tab4:
 
         if grp_rows4:
             grp_df4   = pd.DataFrame(grp_rows4)
-            bar_clrs4 = matplotlib.colormaps["viridis"](
-                np.linspace(0.3, 0.9, len(grp_df4))
-            )
             fig7, ax7 = styled_fig(6.4, 4.2)
             bars7 = ax7.bar(
                 grp_df4["Age Group"], grp_df4["MAE (years)"],
-                color=bar_clrs4, alpha=0.85, width=0.6,
+                color=ACCENT, alpha=0.8, width=0.6,
             )
             for bar7, val7 in zip(bars7, grp_df4["MAE (years)"]):
                 ax7.text(
                     bar7.get_x() + bar7.get_width() / 2,
                     bar7.get_height() + 0.05,
                     f"{val7:.2f}", ha="center", va="bottom",
-                    fontsize=8, color="#e2e8f0",
+                    fontsize=8, color=INK,
                 )
             ax7.axhline(
-                metrics["MAE"], color=ACCENT, linewidth=1.5, linestyle="--",
+                metrics["MAE"], color=POS_CLR, linewidth=1.2, linestyle="--",
                 label=f"Overall MAE: {metrics['MAE']:.2f} y",
             )
-            ax7.legend(framealpha=0, labelcolor="#e2e8f0", fontsize=8.5)
+            ax7.legend(frameon=True, facecolor="white", edgecolor="none",
+                       framealpha=1, fontsize=8.5, loc="upper right")
             ax7.set_xlabel("Age Group")
             ax7.set_ylabel("MAE (years)")
-            ax7.grid(axis="y", alpha=0.25)
+            ax7.grid(axis="y")
+            ax7.set_axisbelow(True)
             fig7.tight_layout()
             st.pyplot(fig7, clear_figure=True)
             st.dataframe(grp_df4.round(3), use_container_width=True, hide_index=True)
@@ -966,7 +884,7 @@ with tab4:
     # Training curve + BAG vs age
     with b2col:
         st.markdown(
-            '<div class="section-header">📈 Training Loss Curve</div>',
+            '<div class="section-header">Training Loss Curve</div>',
             unsafe_allow_html=True,
         )
         meta_ckpt = json.loads(
@@ -981,23 +899,24 @@ with tab4:
 
             fig8, ax8 = styled_fig(6.4, 4.2)
             ax8r = ax8.twinx()
+            ax8r.spines[["top"]].set_visible(False)
             l1h, = ax8.plot(
-                epochs8, train_loss8, color=ACCENT, linewidth=2, label="Train loss"
+                epochs8, train_loss8, color=ACCENT, linewidth=1.8, label="Train loss"
             )
             l2h, = ax8r.plot(
                 epochs8, val_mae8, color=ACCENT2,
-                linewidth=2, linestyle="--", label="Val MAE",
+                linewidth=1.8, linestyle="--", label="Val MAE",
             )
             if best_val8 is not None:
                 ax8r.axhline(
-                    best_val8, color=POS_CLR, linewidth=1.2, linestyle=":",
+                    best_val8, color=POS_CLR, linewidth=1.1, linestyle=":",
                     label=f"Best val MAE: {best_val8:.2f} y",
                 )
             ax8.set_xlabel("Epoch")
             ax8.set_ylabel("Train Loss (KL-div)", color=ACCENT)
             ax8r.set_ylabel("Val MAE (years)", color=ACCENT2)
-            ax8r.spines["right"].set_color("#1e3a5f")
-            ax8r.tick_params(colors="#64748b")
+            ax8r.spines["right"].set_color(RULE)
+            ax8r.tick_params(colors=MUTED)
             ax8r.yaxis.label.set_color(ACCENT2)
             ax8.yaxis.label.set_color(ACCENT)
             leg_lines  = [l1h, l2h]
@@ -1006,16 +925,15 @@ with tab4:
                 leg_labels.append(f"Best: {best_val8:.2f} y")
             ax8.legend(
                 leg_lines, leg_labels,
-                framealpha=0, labelcolor="#e2e8f0",
-                fontsize=8.5, loc="upper right",
+                frameon=False, fontsize=8.5, loc="upper right",
             )
-            ax8.grid(True, alpha=0.2)
+            ax8.grid(True, alpha=0.6)
             fig8.tight_layout()
             st.pyplot(fig8, clear_figure=True)
 
         st.markdown(
-            '<div class="section-header" style="margin-top:1rem;">'
-            '🔗 BAG vs Chronological Age</div>',
+            '<div class="section-header" style="margin-top:1.2rem;">'
+            'BAG vs Chronological Age</div>',
             unsafe_allow_html=True,
         )
         bag_plot9 = raw.dropna(subset=["age", "predicted_age"]).copy()
@@ -1026,13 +944,14 @@ with tab4:
         fig9, ax9 = styled_fig(6.4, 3.6)
         ax9.scatter(
             bag_plot9["age"], bag_plot9["bag_v"],
-            s=7, alpha=0.38,
-            c=bag_plot9["bag_v"].abs(), cmap="RdYlGn_r", vmin=0, vmax=10,
+            s=7, alpha=0.5,
+            c=bag_plot9["bag_v"].abs(), cmap=SEQ_CMAP, vmin=0, vmax=10,
         )
-        ax9.axhline(0, color=ACCENT, linewidth=1.5, linestyle="--")
+        ax9.axhline(0, color=INK, linewidth=1.0, linestyle="--")
         ax9.set_xlabel("Chronological Age (years)")
         ax9.set_ylabel("BAG (Predicted − Actual)")
-        ax9.grid(True, alpha=0.22)
+        ax9.grid(True)
+        ax9.set_axisbelow(True)
         st.caption(
             f"Slope = {metrics['BAG_vs_age_slope']:.4f}  |  "
             f"p = {metrics['BAG_vs_age_p']:.3f}  |  "
@@ -1043,11 +962,11 @@ with tab4:
 
     st.markdown("---")
 
-    with st.expander("📋 Full metrics JSON", expanded=False):
+    with st.expander("Full metrics JSON", expanded=False):
         st.json(metrics)
 
     with st.expander(
-        "🔍 Explore full prediction table (V3 cross-val)", expanded=False
+        "Explore full prediction table (V3 cross-val)", expanded=False
     ):
         age_range_full = st.slider(
             "Filter chronological age",
@@ -1071,7 +990,7 @@ with tab4:
         st.dataframe(disp_df[show_cols].round(3), use_container_width=True, hide_index=True)
         st.caption(f"{len(disp_df):,} rows shown.")
 
-    with st.expander("📖 Methodology & Provenance", expanded=False):
+    with st.expander("Methodology & Provenance", expanded=False):
         st.markdown("""
 **Dataset:** OASIS-3 longitudinal study, cognitively normal (CN) subset.  
 **Preprocessing (V3):** skull-strip → affine registration to MNI152 1 mm → brain-only z-score →
