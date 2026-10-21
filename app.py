@@ -1,6 +1,6 @@
 """Brain Age Lab — four-layer Streamlit demo.
 
-Layer 1 — MRI viewer and scan selection (OASIS preprocessed NPZ volumes)
+Layer 1 — MRI viewer and user scan upload (preprocessed NPZ volume)
 Layer 2 — Real-time brain-age prediction with latency reporting
 Layer 3 — Brain Age Gap (BAG) and per-scan error analysis
 Layer 4 — Research performance explorer (test-set charts and metrics)
@@ -26,7 +26,6 @@ from inference import load_model, predict_array, EXPECTED_SHAPE
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
-PREP = ROOT.parent / "brain age prep and meth" / "T1 preprocessed v2"
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -76,6 +75,37 @@ div[data-testid="stMetricDelta"] { color: #6B7178 !important; font-size: .8rem; 
 .bag-box .lbl { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: #6B7178; margin-bottom: .35rem; }
 .bag-box .val { font-size: 2rem; font-weight: 600; }
 .bag-box .sub { font-size: .82rem; color: #6B7178; margin-top: .35rem; }
+
+/* Empty state and spec cards */
+.empty-state {
+    border: 1px dashed #C5C9CE;
+    border-radius: 6px;
+    padding: 2.4rem 1.6rem;
+    text-align: center;
+    background: #F9FAFB;
+    margin: 0.5rem 0 1.2rem 0;
+}
+.empty-state h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.15rem;
+    color: #1F2328;
+}
+.empty-state p {
+    color: #6B7178;
+    font-size: 0.9rem;
+    margin: 0 auto;
+    max-width: 34rem;
+    line-height: 1.5;
+}
+.spec-box {
+    background: #FFFFFF;
+    border: 1px solid #E1E3E6;
+    border-radius: 4px;
+    padding: 0.9rem 1.1rem;
+    font-size: 0.85rem;
+    color: #3A3F45;
+    margin-top: 0.6rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -192,6 +222,57 @@ def load_volume(npz_path: str) -> np.ndarray:
         return np.asarray(f["data"], dtype=np.float32)
 
 
+def parse_npz_bytes(raw_bytes: bytes) -> np.ndarray:
+    """Extract and validate 3D float32 volume from uploaded NPZ bytes."""
+    with np.load(io.BytesIO(raw_bytes), allow_pickle=False) as f:
+        if "data" in f.files:
+            arr = f["data"]
+        elif len(f.files) == 1:
+            arr = f[f.files[0]]
+        else:
+            raise KeyError(
+                f"NPZ archive must contain an array named 'data'. Available keys: {list(f.files)}"
+            )
+        vol = np.squeeze(np.asarray(arr, dtype=np.float32))
+        if vol.shape != EXPECTED_SHAPE:
+            raise ValueError(
+                f"Expected volume shape {EXPECTED_SHAPE} (160 × 192 × 160); received {vol.shape}."
+            )
+        if not np.isfinite(vol).all():
+            raise ValueError("The volume contains NaN or infinite values.")
+        return vol
+
+
+def generate_synthetic_volume() -> np.ndarray:
+    """Generate a synthetic 3D brain phantom volume of shape (160, 192, 160) for testing."""
+    x = np.linspace(-1, 1, 160, dtype=np.float32)[:, None, None]
+    y = np.linspace(-1, 1, 192, dtype=np.float32)[None, :, None]
+    z = np.linspace(-1, 1, 160, dtype=np.float32)[None, None, :]
+    r = (x / 0.7) ** 2 + (y / 0.85) ** 2 + (z / 0.7) ** 2
+    brain_mask = r < 1.0
+    ventricle_r = (x / 0.18) ** 2 + (y / 0.35) ** 2 + (z / 0.18) ** 2
+    ventricle_mask = ventricle_r < 1.0
+
+    vol = np.zeros((160, 192, 160), dtype=np.float32)
+    vol[brain_mask] = 1.0 - 0.25 * r[brain_mask]
+    vol[ventricle_mask] = 0.1
+    rng = np.random.RandomState(42)
+    noise = rng.normal(0, 0.05, (160, 192, 160)).astype(np.float32)
+    vol[brain_mask] += noise[brain_mask]
+    brain_vals = vol[brain_mask]
+    vol[brain_mask] = (brain_vals - brain_vals.mean()) / (brain_vals.std() + 1e-6)
+    return vol
+
+
+@st.cache_data(show_spinner=False)
+def get_synthetic_npz_bytes() -> bytes:
+    """Return compressed bytes of a synthetic demo brain NPZ file."""
+    vol = generate_synthetic_volume()
+    buf = io.BytesIO()
+    np.savez_compressed(buf, data=vol)
+    return buf.getvalue()
+
+
 # ---------------------------------------------------------------------------
 # Model (load once)
 # ---------------------------------------------------------------------------
@@ -212,208 +293,299 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 
 # ===========================================================================
-# LAYER 1 — MRI Viewer & Scan Selection
+# LAYER 1 — MRI Viewer & Scan Input
 # ===========================================================================
 with tab1:
     st.markdown(
-        '<div class="layer-badge">Layer 1 — MRI Viewer &amp; Scan Selection</div>',
+        '<div class="layer-badge">Layer 1 — MRI Viewer &amp; Scan Input</div>',
         unsafe_allow_html=True,
     )
 
-    if not catalogue:
-        st.error(
-            "No preprocessed NPZ files were found on disk. "
-            f"Expected path: {PREP}"
+    col_input, col_viewer = st.columns([1.15, 2.35], gap="large")
+
+    with col_input:
+        st.markdown(
+            '<div class="section-header">Scan Input</div>',
+            unsafe_allow_html=True,
         )
-    else:
-        col_sel, col_viewer = st.columns([1, 2.5], gap="large")
 
-        with col_sel:
-            st.markdown(
-                '<div class="section-header">Select Scan</div>',
-                unsafe_allow_html=True,
+        uploaded_file = st.file_uploader(
+            "Upload preprocessed MRI (.npz)",
+            type=["npz"],
+            help="Select a 3D preprocessed brain volume in .npz format (160×192×160 voxels, 'data' array).",
+            key="l1_user_upload",
+        )
+
+        # Quick demo & sample test helpers
+        with st.expander("🧪 Need a sample scan to test?", expanded=False):
+            st.caption(
+                "Generate a synthetic 3D brain phantom to explore the viewer, "
+                "run prediction, and test the 4-layer pipeline without an external MRI file."
             )
-
-            age_vals    = [r["age"] for r in catalogue if not np.isnan(r["age"])]
-            age_min_val = int(np.floor(min(age_vals))) if age_vals else 40
-            age_max_val = int(np.ceil(max(age_vals)))  if age_vals else 100
-
-            age_filt = st.slider(
-                "Filter by age",
-                min_value=age_min_val, max_value=age_max_val,
-                value=(age_min_val, age_max_val),
-                key="l1_age_filt",
-            )
-            sex_filt = st.multiselect(
-                "Sex", ["M", "F"], default=["M", "F"], key="l1_sex",
-            )
-
-            filtered_cat = [
-                r for r in catalogue
-                if (np.isnan(r["age"]) or age_filt[0] <= r["age"] <= age_filt[1])
-                and r["sex"] in sex_filt
-            ]
-
-            if not filtered_cat:
-                st.warning("No scans match the filters.")
-                st.stop()
-
-            scan_labels = [
-                (
-                    f"{r['label']}  ·  {r['age']:.1f}y  ·  {r['sex']}"
-                    if not np.isnan(r["age"])
-                    else f"{r['label']}  ·  {r['sex']}"
+            c_btn1, c_btn2 = st.columns(2)
+            with c_btn1:
+                if st.button("Load Demo Scan", use_container_width=True, key="btn_load_synth"):
+                    st.session_state["_volume"] = generate_synthetic_volume()
+                    st.session_state["_loaded_file_id"] = "synthetic_demo"
+                    st.session_state["_vsrc"] = "synthetic"
+                    st.session_state["_scan_label"] = "Synthetic_Brain_Demo"
+                    st.session_state["_scan_age"] = 65.0
+                    st.session_state["_has_age"] = True
+                    st.session_state["_scan_sex"] = "Unknown"
+                    # Reset prediction state
+                    st.session_state.pop("_pred_age", None)
+                    st.session_state.pop("_result", None)
+                    st.session_state.pop("_elapsed", None)
+                    st.rerun()
+            with c_btn2:
+                st.download_button(
+                    label="Download .npz",
+                    data=get_synthetic_npz_bytes(),
+                    file_name="sample_brain_t1w_preproc.npz",
+                    mime="application/octet-stream",
+                    use_container_width=True,
+                    key="btn_dl_synth",
                 )
-                for r in filtered_cat
-            ]
-            chosen_idx = st.selectbox(
-                f"Available scans ({len(filtered_cat)} shown)",
-                range(len(filtered_cat)),
-                format_func=lambda i: scan_labels[i],
-                key="l1_scan",
-            )
-            scan = filtered_cat[chosen_idx]
 
-            # Metadata
+        # Optional: if catalogue scans happen to exist on disk, allow selection
+        if catalogue:
+            with st.expander(f"📁 Select from disk catalogue ({len(catalogue)} scans)", expanded=False):
+                cat_labels = [
+                    f"{r['label']} · {r['age']:.1f}y · {r['sex']}" if not np.isnan(r["age"]) else f"{r['label']} · {r['sex']}"
+                    for r in catalogue
+                ]
+                chosen_cat_idx = st.selectbox(
+                    "Catalogue scan",
+                    range(len(catalogue)),
+                    format_func=lambda i: cat_labels[i],
+                    key="sel_cat_scan",
+                )
+                if st.button("Load catalogue scan", key="btn_load_cat"):
+                    chosen_r = catalogue[chosen_cat_idx]
+                    try:
+                        vol_cat = load_volume(chosen_r["npz_path"])
+                        st.session_state["_volume"] = np.squeeze(vol_cat)
+                        st.session_state["_loaded_file_id"] = f"cat_{chosen_r['label']}"
+                        st.session_state["_vsrc"] = "catalogue"
+                        st.session_state["_scan_label"] = chosen_r["label"]
+                        st.session_state["_scan_age"] = chosen_r["age"]
+                        st.session_state["_has_age"] = not np.isnan(chosen_r["age"])
+                        st.session_state["_scan_sex"] = "Female" if chosen_r["sex"] == "F" else ("Male" if chosen_r["sex"] == "M" else "Unknown")
+                        st.session_state.pop("_pred_age", None)
+                        st.session_state.pop("_result", None)
+                        st.session_state.pop("_elapsed", None)
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Could not load scan: {exc}")
+
+        # Handle file upload event
+        if uploaded_file is not None:
+            file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+            if st.session_state.get("_loaded_file_id") != file_id:
+                try:
+                    uploaded_file.seek(0)
+                    vol_loaded = parse_npz_bytes(uploaded_file.read())
+                    st.session_state["_volume"] = vol_loaded
+                    st.session_state["_loaded_file_id"] = file_id
+                    st.session_state["_vsrc"] = "upload"
+                    st.session_state["_scan_label"] = Path(uploaded_file.name).stem
+                    # Reset prediction state
+                    st.session_state.pop("_pred_age", None)
+                    st.session_state.pop("_result", None)
+                    st.session_state.pop("_elapsed", None)
+                except Exception as exc:
+                    st.error(f"Error parsing uploaded NPZ: {exc}")
+        elif st.session_state.get("_vsrc") == "upload" and uploaded_file is None:
+            # User cleared uploader
+            st.session_state.pop("_volume", None)
+            st.session_state.pop("_loaded_file_id", None)
+            st.session_state.pop("_vsrc", None)
+            st.session_state.pop("_scan", None)
+            st.session_state.pop("_pred_age", None)
+            st.session_state.pop("_result", None)
+            st.session_state.pop("_elapsed", None)
+
+        # Metadata inputs when volume is loaded
+        if st.session_state.get("_volume") is not None:
             st.markdown("---")
             st.markdown(
-                '<div class="section-header">Scan Metadata</div>',
+                '<div class="section-header">Scan Metadata (Optional)</div>',
                 unsafe_allow_html=True,
             )
-            meta_items = [
-                ("Subject ID",  scan["subject_id"]),
-                ("MRI Label",   scan["label"]),
-                ("Age at scan", f"{scan['age']:.2f} y" if not np.isnan(scan["age"]) else "N/A"),
-                ("Sex",         scan["sex"]),
-                ("CV Fold",     str(scan["fold"])),
-                ("MMSE",        fmt(scan["MMSE"], 0) if not np.isnan(scan["MMSE"]) else "N/A"),
-                ("CDR Total",   fmt(scan["CDRTOT"], 1) if not np.isnan(scan["CDRTOT"]) else "N/A"),
+
+            current_lbl = st.session_state.get("_scan_label", "Scan_01")
+            scan_label = st.text_input(
+                "Scan / Subject ID",
+                value=current_lbl,
+                key="input_scan_label",
+            )
+            st.session_state["_scan_label"] = scan_label
+
+            c_age1, c_age2 = st.columns([1.1, 1.4])
+            with c_age1:
+                has_chron = st.checkbox(
+                    "Known age",
+                    value=st.session_state.get("_has_age", False),
+                    help="Check to enter chronological age for Brain Age Gap (BAG) computation.",
+                    key="cb_known_age",
+                )
+                st.session_state["_has_age"] = has_chron
+            with c_age2:
+                if has_chron:
+                    default_age = float(st.session_state.get("_scan_age", 65.0))
+                    if np.isnan(default_age):
+                        default_age = 65.0
+                    chron_val = st.number_input(
+                        "Age (years)",
+                        min_value=1.0,
+                        max_value=120.0,
+                        value=default_age,
+                        step=0.5,
+                        key="num_chron_age",
+                    )
+                    st.session_state["_scan_age"] = chron_val
+                else:
+                    chron_val = float("nan")
+
+            sex_opts = ["Unknown", "Female", "Male"]
+            prev_sex = st.session_state.get("_scan_sex", "Unknown")
+            sex_idx = sex_opts.index(prev_sex) if prev_sex in sex_opts else 0
+            sex_opt = st.selectbox(
+                "Sex",
+                sex_opts,
+                index=sex_idx,
+                key="sel_scan_sex",
+            )
+            st.session_state["_scan_sex"] = sex_opt
+            sex_code = "F" if sex_opt == "Female" else ("M" if sex_opt == "Male" else "?")
+
+            vsrc_label = {
+                "upload": "User Upload",
+                "synthetic": "Synthetic Demo",
+                "catalogue": "Catalogue Disk Scan",
+            }.get(st.session_state.get("_vsrc", ""), "User Input")
+
+            st.session_state["_scan"] = {
+                "label": scan_label,
+                "subject_id": scan_label,
+                "age": chron_val,
+                "sex": sex_code,
+                "fold": vsrc_label,
+                "MMSE": float("nan"),
+                "CDRTOT": float("nan"),
+            }
+
+            vol = st.session_state["_volume"]
+            st.markdown("---")
+            st.markdown(
+                '<div class="section-header">Volume Summary</div>',
+                unsafe_allow_html=True,
+            )
+            summary_items = [
+                ("Subject / Label", scan_label),
+                ("Chronological Age", f"{chron_val:.1f} y" if not np.isnan(chron_val) else "Not specified"),
+                ("Sex", sex_opt),
+                ("Dimensions", f"{vol.shape[0]} × {vol.shape[1]} × {vol.shape[2]}"),
+                ("Intensity (z-score)", f"[{vol.min():.2f}, {vol.max():.2f}]"),
+                ("Source", vsrc_label),
             ]
-            for k, v in meta_items:
+            for k, v in summary_items:
                 st.markdown(
                     f'<div class="kv"><span>{k}</span><span>{v}</span></div>',
                     unsafe_allow_html=True,
                 )
 
-            # Upload override
-            st.markdown("---")
+            if st.button("Unload / Clear Scan", key="btn_clear_scan"):
+                st.session_state.pop("_volume", None)
+                st.session_state.pop("_loaded_file_id", None)
+                st.session_state.pop("_vsrc", None)
+                st.session_state.pop("_scan", None)
+                st.session_state.pop("_pred_age", None)
+                st.session_state.pop("_result", None)
+                st.session_state.pop("_elapsed", None)
+                st.rerun()
+
+    with col_viewer:
+        volume = st.session_state.get("_volume", None)
+
+        if volume is not None:
             st.markdown(
-                '<div class="section-header">Upload Your NPZ</div>',
+                '<div class="section-header">Orthogonal Slice Viewer</div>',
                 unsafe_allow_html=True,
             )
-            uploaded = st.file_uploader(
-                "Upload preprocessed NPZ (overrides catalogue scan)",
-                type=["npz"], accept_multiple_files=False, key="l1_upload",
+
+            sx, sy, sz = volume.shape
+
+            # Sliders in display order: Axial (Z) → Coronal (Y) → Sagittal (X)
+            c1, c2, c3 = st.columns(3)
+            axi_idx = c1.slider("Axial (Z)",    0, sz - 1, sz // 2, key="axi")
+            cor_idx = c2.slider("Coronal (Y)",  0, sy - 1, sy // 2, key="cor")
+            sag_idx = c3.slider("Sagittal (X)", 0, sx - 1, sx // 2, key="sag")
+
+            fig = plt.figure(figsize=(13, 4.4), constrained_layout=True)
+            gs  = gridspec.GridSpec(1, 3, figure=fig, wspace=0.06)
+
+            view_data = [
+                ("Axial",    np.rot90(volume[:, :, axi_idx]), f"z={axi_idx}"),
+                ("Coronal",  np.rot90(volume[:, cor_idx, :]), f"y={cor_idx}"),
+                ("Sagittal", np.rot90(volume[sag_idx, :, :]), f"x={sag_idx}"),
+            ]
+            for i, (title, slc, coord) in enumerate(view_data):
+                ax_v = fig.add_subplot(gs[i])
+                ax_v.imshow(slc, cmap="gray", interpolation="bilinear", aspect="auto")
+                ax_v.set_title(
+                    f"{title}  ({coord})",
+                    color=INK, fontsize=10, fontweight="medium", pad=6,
+                )
+                ax_v.axis("off")
+
+            st.pyplot(fig, clear_figure=True)
+
+            # Intensity profile
+            with st.expander(
+                "Intensity profile (centre row, axial slice)", expanded=False
+            ):
+                mid_row = volume[:, sy // 2, axi_idx]
+                fig2, ax2 = styled_fig(11, 2.4)
+                ax2.plot(mid_row, color=ACCENT, linewidth=1.2)
+                ax2.fill_between(
+                    range(len(mid_row)), mid_row, alpha=0.12, color=ACCENT
+                )
+                ax2.set_xlabel("Voxel index (X)")
+                ax2.set_ylabel("Intensity (z-score)")
+                ax2.grid(True)
+                fig2.tight_layout()
+                st.pyplot(fig2, clear_figure=True)
+
+            active_lbl = st.session_state["_scan"]["label"]
+            st.info(
+                f"Scan **{active_lbl}** is loaded and ready. "
+                "Navigate to **Layer 2 · Prediction** to run brain-age inference."
             )
-            if uploaded:
-                st.code(
-                    f"Required shape: {EXPECTED_SHAPE}\nRequired key: data",
-                    language="text",
-                )
+        else:
+            st.markdown(
+                '<div class="section-header">Orthogonal Slice Viewer</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown("""
+<div class="empty-state">
+  <div style="font-size: 2.2rem; margin-bottom: 0.6rem;">🧠</div>
+  <h3>Awaiting Preprocessed MRI Scan</h3>
+  <p>Upload a preprocessed 3D T1-weighted volume in <code>.npz</code> format using the panel on the left to inspect orthogonal slices and estimate brain age.</p>
+</div>
 
-        # Viewer column
-        with col_viewer:
-            volume = None
-            volume_source = "catalogue"
+<div class="spec-box">
+  <b>Preprocessed Input Requirements:</b>
+  <ul style="margin: 0.4rem 0 0.2rem 1.2rem; padding: 0;">
+    <li><b>File Format:</b> NumPy <code>.npz</code> archive</li>
+    <li><b>Array Key:</b> <code>data</code> (or single root array)</li>
+    <li><b>Shape:</b> Exactly <code>(160, 192, 160)</code> voxels</li>
+    <li><b>Registration:</b> Affine registered to MNI152 (1 mm)</li>
+    <li><b>Normalization:</b> Skull-stripped, brain-only intensity z-scored</li>
+  </ul>
+</div>
+""", unsafe_allow_html=True)
 
-            if uploaded is not None:
-                try:
-                    raw_bytes = uploaded.read()
-                    with np.load(io.BytesIO(raw_bytes), allow_pickle=False) as f:
-                        if "data" not in f.files:
-                            st.error("NPZ must contain an array named 'data'.")
-                        else:
-                            vol_tmp = np.squeeze(
-                                np.asarray(f["data"], dtype=np.float32)
-                            )
-                            if vol_tmp.shape != EXPECTED_SHAPE:
-                                st.error(
-                                    f"Expected shape {EXPECTED_SHAPE}, "
-                                    f"got {vol_tmp.shape}."
-                                )
-                            elif not np.isfinite(vol_tmp).all():
-                                st.error("Volume contains NaN/Inf values.")
-                            else:
-                                volume = vol_tmp
-                                volume_source = "upload"
-                except Exception as exc:
-                    st.error(f"Could not read NPZ: {exc}")
-
-            if volume is None:
-                try:
-                    vol_tmp = load_volume(scan["npz_path"])
-                    volume  = np.squeeze(vol_tmp)
-                    if volume.shape != EXPECTED_SHAPE:
-                        st.error(f"Unexpected shape {volume.shape}.")
-                        volume = None
-                except Exception as exc:
-                    st.error(f"Could not load scan: {exc}")
-
-            if volume is not None:
-                st.markdown(
-                    '<div class="section-header">Orthogonal Slice Viewer</div>',
-                    unsafe_allow_html=True,
-                )
-
-                sx, sy, sz = volume.shape
-
-                # Sliders in display order: Axial (Z) → Coronal (Y) → Sagittal (X)
-                c1, c2, c3 = st.columns(3)
-                axi_idx = c1.slider("Axial (Z)",    0, sz - 1, sz // 2, key="axi")
-                cor_idx = c2.slider("Coronal (Y)",  0, sy - 1, sy // 2, key="cor")
-                sag_idx = c3.slider("Sagittal (X)", 0, sx - 1, sx // 2, key="sag")
-
-                # constrained_layout avoids tight_layout + GridSpec warnings
-                fig = plt.figure(figsize=(13, 4.4), constrained_layout=True)
-                gs  = gridspec.GridSpec(1, 3, figure=fig, wspace=0.06)
-
-                view_data = [
-                    ("Axial",    np.rot90(volume[:, :, axi_idx]), f"z={axi_idx}"),
-                    ("Coronal",  np.rot90(volume[:, cor_idx, :]), f"y={cor_idx}"),
-                    ("Sagittal", np.rot90(volume[sag_idx, :, :]), f"x={sag_idx}"),
-                ]
-                for i, (title, slc, coord) in enumerate(view_data):
-                    ax_v = fig.add_subplot(gs[i])
-                    ax_v.imshow(slc, cmap="gray", interpolation="bilinear", aspect="auto")
-                    ax_v.set_title(
-                        f"{title}  ({coord})",
-                        color=INK, fontsize=10, fontweight="medium", pad=6,
-                    )
-                    ax_v.axis("off")
-
-                st.pyplot(fig, clear_figure=True)
-
-                # Intensity profile
-                with st.expander(
-                    "Intensity profile (centre row, axial slice)", expanded=False
-                ):
-                    mid_row = volume[:, sy // 2, axi_idx]
-                    fig2, ax2 = styled_fig(11, 2.4)
-                    ax2.plot(mid_row, color=ACCENT, linewidth=1.2)
-                    ax2.fill_between(
-                        range(len(mid_row)), mid_row, alpha=0.12, color=ACCENT
-                    )
-                    ax2.set_xlabel("Voxel index (X)")
-                    ax2.set_ylabel("Intensity (z-score)")
-                    ax2.grid(True)
-                    fig2.tight_layout()
-                    st.pyplot(fig2, clear_figure=True)
-
-                # Store for Layer 2
-                st.session_state["_volume"] = volume
-                st.session_state["_scan"]   = scan
-                st.session_state["_vsrc"]   = volume_source
-
-                if volume_source == "upload":
-                    st.info(
-                        "Showing **uploaded** volume. "
-                        "Go to **Layer 2** to run inference."
-                    )
-                else:
-                    st.info(
-                        f"Showing **{scan['label']}** from the OASIS-3 demo collection. "
-                        "Go to **Layer 2** to run inference."
-                    )
 
 
 # ===========================================================================
@@ -447,19 +619,21 @@ with tab2:
             '<div class="section-header" style="margin-top:1.4rem;">Active Scan</div>',
             unsafe_allow_html=True,
         )
-        if "_scan" in st.session_state:
+        if "_scan" in st.session_state and "_volume" in st.session_state and st.session_state["_volume"] is not None:
             s = st.session_state["_scan"]
+            age_disp = f"{fmt(s['age'])} y" if not np.isnan(s.get("age", float("nan"))) else "Not specified"
             st.markdown(
                 f'<div class="info-box">'
                 f'<b>Label:</b> {s["label"]}<br>'
                 f'<b>Subject:</b> {s["subject_id"]}<br>'
-                f'<b>Age:</b> {fmt(s["age"])} y<br>'
-                f'<b>Sex:</b> {s["sex"]}'
+                f'<b>Age:</b> {age_disp}<br>'
+                f'<b>Sex:</b> {s["sex"]}<br>'
+                f'<b>Source:</b> {s.get("fold", "User Upload")}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
         else:
-            st.info("Go to **Layer 1** and select a scan first.")
+            st.info("Go to **Layer 1** and upload a scan first.")
 
     with col_pred2:
         st.markdown(
@@ -473,7 +647,7 @@ with tab2:
         )
 
         if not volume_ready:
-            st.warning("No volume loaded — select a scan in **Layer 1** first.")
+            st.warning("No volume loaded — please upload a scan in **Layer 1** first.")
         else:
             st.markdown(
                 f'<p style="color:#6B7178;font-size:.88rem;">Volume shape: '
@@ -542,7 +716,7 @@ with tab2:
                 label=f"Predicted: {pred_age:.1f} y",
             )
             if "_scan" in st.session_state:
-                chron = st.session_state["_scan"]["age"]
+                chron = st.session_state["_scan"].get("age", float("nan"))
                 if not np.isnan(chron):
                     ax3.axvline(
                         chron, color=NEG_CLR, linewidth=1.8, linestyle=":",
@@ -576,17 +750,21 @@ with tab3:
 
     with left3:
         st.markdown(
-            '<div class="section-header">BAG for Selected Scan</div>',
+            '<div class="section-header">BAG for Active Scan</div>',
             unsafe_allow_html=True,
         )
 
         has_pred = "_pred_age" in st.session_state
-        has_scan = "_scan"     in st.session_state
+        has_scan = (
+            "_scan" in st.session_state
+            and "_volume" in st.session_state
+            and st.session_state["_volume"] is not None
+        )
 
         if has_pred and has_scan:
             pred_age = st.session_state["_pred_age"]
             scan_s   = st.session_state["_scan"]
-            chron    = scan_s["age"]
+            chron    = scan_s.get("age", float("nan"))
 
             if not np.isnan(chron):
                 bag_val  = pred_age - chron
@@ -640,12 +818,21 @@ with tab3:
                     "uncertainty and training distribution effects — not brain pathology."
                 )
             else:
-                st.info("Chronological age not available for this scan.")
-                st.metric("Predicted Age", f"{pred_age:.1f} y")
+                st.metric("Predicted Brain Age", f"{pred_age:.1f} y")
+                st.info(
+                    "Chronological age was not provided for this scan. "
+                    "Brain Age Gap (BAG = Predicted − Chronological) cannot be calculated. "
+                    "To view BAG analysis, check 'Known age' and specify chronological age in **Layer 1**."
+                )
+        elif has_scan:
+            st.info(
+                "Scan is loaded. Complete **Layer 2** (run prediction) to see the Brain Age Gap "
+                "for the active scan."
+            )
         else:
             st.info(
-                "Complete **Layer 2** (run a prediction) to see the BAG "
-                "for the selected scan."
+                "Upload a scan in **Layer 1** and run prediction in **Layer 2** to see the BAG "
+                "for the active scan."
             )
 
     with right3:
@@ -664,8 +851,32 @@ with tab3:
         )
         demo_with_bag["abs_error"] = demo_with_bag["BAG_computed"].abs()
 
+        # If user has an active scan with prediction and chronological age, include it
+        has_active_bag = (
+            "_pred_age" in st.session_state
+            and "_scan" in st.session_state
+            and not np.isnan(st.session_state["_scan"].get("age", float("nan")))
+        )
+        if has_active_bag:
+            s_act = st.session_state["_scan"]
+            p_act = st.session_state["_pred_age"]
+            bag_act = p_act - s_act["age"]
+            active_row = pd.DataFrame([{
+                "mri_label": f"★ {s_act['label']} (Active)",
+                "subject_id": s_act["subject_id"],
+                "age": s_act["age"],
+                "predicted_age": p_act,
+                "BAG_computed": bag_act,
+                "abs_error": abs(bag_act),
+            }])
+            demo_with_bag = pd.concat([active_row, demo_with_bag], ignore_index=True)
+
         subj_options = demo_with_bag["mri_label"].tolist()
-        default_sel  = subj_options[: min(6, len(subj_options))]
+        if has_active_bag:
+            default_sel = [subj_options[0]] + subj_options[1: min(6, len(subj_options))]
+        else:
+            default_sel = subj_options[: min(6, len(subj_options))]
+
         selected_scans = st.multiselect(
             "Select demo scans to compare",
             options=subj_options,
@@ -786,10 +997,11 @@ with tab4:
         if "_pred_age" in st.session_state and "_scan" in st.session_state:
             s4  = st.session_state["_scan"]
             pa4 = st.session_state["_pred_age"]
-            if not np.isnan(s4["age"]):
+            s4_age = s4.get("age", float("nan"))
+            if s4_age is not None and not np.isnan(s4_age):
                 ax5.scatter(
-                    [s4["age"]], [pa4], s=120, color=POS_CLR,
-                    zorder=5, marker="*", label="Selected scan",
+                    [s4_age], [pa4], s=120, color=POS_CLR,
+                    zorder=5, marker="*", label=f"Active: {s4['label']}",
                 )
 
         ax5.legend(frameon=False, fontsize=8.5)

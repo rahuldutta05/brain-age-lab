@@ -32,9 +32,15 @@ streamlit run app.py
 
 ## Run inference
 
-The **Run a prediction** tab accepts a `.npz` file containing a `data` array with shape `(160, 192, 160)`. It must already be preprocessed exactly as expected by the V3 pipeline: brain-only, z-scored, with the same orientation/cropping/registration/resampling convention.
+**Layer 1 (MRI Viewer & Scan Input)** accepts user-uploaded `.npz` files containing a `data` array with shape `(160, 192, 160)`. The volume must be preprocessed according to the V3 pipeline: skull-stripped, affine-registered to MNI152 1 mm space, and brain-only intensity z-scored.
 
-This app does not run the raw MRI preprocessing pipeline. It will reject incompatible shapes rather than silently resize them.
+The app also provides an interactive option to generate and test with a synthetic 3D brain phantom directly in the UI if you do not have an OASIS-3 NPZ file immediately on hand.
+
+Once a volume is loaded:
+- **Layer 1**: Inspect 3D orthogonal slices (Axial, Coronal, Sagittal) and intensity profiles.
+- **Layer 2**: Run live SFCN CPU inference to estimate brain age and inspect model confidence.
+- **Layer 3**: Analyze Brain Age Gap (BAG = Predicted − Chronological Age) and compare with benchmark cohorts.
+- **Layer 4**: Explore full test-set validation accuracy, scatter plots, error distributions, and subgroup MAE.
 
 ## Deploy on Streamlit Community Cloud
 
