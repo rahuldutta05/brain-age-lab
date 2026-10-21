@@ -1,6 +1,7 @@
-"""Brain Age Lab — four-layer Streamlit demo.
+"""Brain Age Lab — five-layer Streamlit demo.
 
-Layer 1 — MRI viewer and user scan upload (preprocessed NPZ volume)
+Layer 0 — Raw MRI viewer & scan selection
+Layer 1 — Preprocessed MRI viewer with metadata (auto-fetched from preprocessed mri/)
 Layer 2 — Real-time brain-age prediction with latency reporting
 Layer 3 — Brain Age Gap (BAG) and per-scan error analysis
 Layer 4 — Research performance explorer (test-set charts and metrics)
@@ -10,6 +11,7 @@ from pathlib import Path
 import json
 import time
 import io
+import re
 
 import matplotlib
 matplotlib.use("Agg")
@@ -18,14 +20,21 @@ import matplotlib.gridspec as gridspec
 import numpy as np
 import pandas as pd
 import streamlit as st
+try:
+    import nibabel as nib
+    _NIBABEL_OK = True
+except ImportError:
+    _NIBABEL_OK = False
 
 from inference import load_model, predict_array, EXPECTED_SHAPE
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-ROOT = Path(__file__).resolve().parent
-DATA = ROOT / "data"
+ROOT      = Path(__file__).resolve().parent
+DATA      = ROOT / "data"
+RAW_MRI   = ROOT / "raw mri"
+PREPROC   = ROOT / "preprocessed mri"
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -73,26 +82,26 @@ if is_dark:
 else:
     PAGE_BG        = "#FFFFFF"
     SURFACE_BG     = "#F5F5F3"
-    SURFACE_BORDER = "#E1E3E6"
-    INK            = "#1F2328"
-    MUTED          = "#6B7178"
-    RULE           = "#B8BCC2"
-    ACCENT         = "#2F5D7C"   # classic navy accent
-    ACCENT2        = "#7A8087"
-    POS_CLR        = "#B5533C"   # muted red
-    NEG_CLR        = "#4F7F5A"   # muted green
-    AMBER          = "#8A6D1F"
-    GRID_CLR       = "#E3E5E8"
+    SURFACE_BORDER = "#D1D5DB"
+    INK            = "#111827"
+    MUTED          = "#4B5563"
+    RULE           = "#9CA3AF"
+    ACCENT         = "#1D4ED8"   # rich blue
+    ACCENT2        = "#6B7280"
+    POS_CLR        = "#B91C1C"   # strong red
+    NEG_CLR        = "#15803D"   # strong green
+    AMBER          = "#92400E"
+    GRID_CLR       = "#E5E7EB"
     CARD_BG        = "#FFFFFF"
-    INFO_BG        = "rgba(197, 201, 206, 0.12)"
-    INFO_BORDER    = "#C5C9CE"
+    INFO_BG        = "rgba(29, 78, 216, 0.06)"
+    INFO_BORDER    = "#3B82F6"
     EMPTY_BG       = "#F9FAFB"
-    EMPTY_BORDER   = "#C5C9CE"
-    SPEC_BG        = "#FFFFFF"
-    SPEC_BORDER    = "#E1E3E6"
-    CODE_BG        = "#F0F2F4"
-    CODE_CLR       = "#2F5D7C"
-    CODE_BORDER    = "#E1E3E6"
+    EMPTY_BORDER   = "#D1D5DB"
+    SPEC_BG        = "#F9FAFB"
+    SPEC_BORDER    = "#D1D5DB"
+    CODE_BG        = "#EFF6FF"
+    CODE_CLR       = "#1D4ED8"
+    CODE_BORDER    = "#BFDBFE"
     SEQ_CMAP       = matplotlib.colors.ListedColormap(
         matplotlib.colormaps["Blues"](np.linspace(0.3, 1.0, 256))
     )
@@ -106,6 +115,11 @@ hr {{ margin: 1.4rem 0; border-color: {SURFACE_BORDER}; }}
 /* Base container */
 .stApp {{
     background-color: {PAGE_BG};
+    color: {INK};
+}}
+
+/* Force all Streamlit text to theme ink color */
+.stApp p, .stApp label, .stApp span, .stApp div {{
     color: {INK};
 }}
 
@@ -169,6 +183,7 @@ div[data-testid="stMetricDelta"] {{ color: {ACCENT} !important; font-size: .8rem
     line-height: 1.6;
     color: {INK};
 }}
+.info-box b {{ color: {INK}; }}
 .kv {{
     display: flex;
     justify-content: space-between;
@@ -184,7 +199,7 @@ div[data-testid="stMetricDelta"] {{ color: {ACCENT} !important; font-size: .8rem
     background: {CARD_BG};
     border: 1px solid {SURFACE_BORDER};
     border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.08);
 }}
 .bag-box .lbl {{
     font-size: .75rem;
@@ -230,6 +245,7 @@ div[data-testid="stMetricDelta"] {{ color: {ACCENT} !important; font-size: .8rem
     margin-top: 0.6rem;
 }}
 .spec-box b {{ color: {INK}; }}
+.spec-box li {{ color: {INK}; }}
 
 /* Streamlit Tabs styling */
 .stTabs [data-baseweb="tab-list"] {{
@@ -252,6 +268,61 @@ div[data-testid="stMetricDelta"] {{ color: {ACCENT} !important; font-size: .8rem
 div[data-testid="stExpander"] {{
     background: {CARD_BG};
     border: 1px solid {SURFACE_BORDER};
+    border-radius: 8px;
+}}
+div[data-testid="stExpander"] summary {{
+    color: {INK};
+}}
+div[data-testid="stExpander"] p,
+div[data-testid="stExpander"] span,
+div[data-testid="stExpander"] label {{
+    color: {INK};
+}}
+
+/* File uploader */
+[data-testid="stFileUploaderDropzone"] {{
+    background: {CARD_BG};
+    border: 1px dashed {SURFACE_BORDER};
+    border-radius: 8px;
+}}
+[data-testid="stFileUploaderDropzoneInstructions"] span,
+[data-testid="stFileUploaderDropzoneInstructions"] p {{
+    color: {MUTED};
+}}
+
+/* Inputs */
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input {{
+    background: {CARD_BG};
+    color: {INK};
+    border-color: {SURFACE_BORDER};
+}}
+[data-testid="stSelectbox"] > div > div {{
+    background: {CARD_BG};
+    color: {INK};
+    border-color: {SURFACE_BORDER};
+}}
+
+/* Toggle label */
+[data-testid="stToggle"] span {{
+    color: {INK} !important;
+}}
+
+/* Sidebar */
+[data-testid="stSidebar"] {{
+    background: {SURFACE_BG};
+    border-right: 1px solid {SURFACE_BORDER};
+}}
+[data-testid="stSidebar"] * {{ color: {INK}; }}
+
+/* Dataframe */
+[data-testid="stDataFrame"] {{
+    border: 1px solid {SURFACE_BORDER};
+    border-radius: 8px;
+}}
+
+/* Success/info/warning boxes */
+[data-testid="stAlert"] {{
     border-radius: 8px;
 }}
 </style>
@@ -350,6 +421,62 @@ with st.spinner("Loading data tables…"):
 
 
 # ---------------------------------------------------------------------------
+# CSV metadata lookup — match uploaded NPZ filename to demo/raw CSV rows
+# ---------------------------------------------------------------------------
+def lookup_metadata_from_filename(stem: str) -> dict | None:
+    """Try to find metadata (age, sex) in CSVs by matching the NPZ filename stem.
+
+    The stem is something like 'sub-OAS30001_ses-d0129_run-02_T1w_preproc'.
+    We try to extract subject_id (e.g. OAS30001) and the session day (e.g. d0129 → 129)
+    and look up matching rows in the demo CSV, then the raw CSV as fallback.
+    """
+    import re
+
+    # Extract OASIS subject ID  e.g. OAS30001
+    subj_match = re.search(r"(OAS3\d+)", stem, re.IGNORECASE)
+    if not subj_match:
+        return None
+    subject_id = subj_match.group(1).upper()
+
+    # Extract session day integer e.g. d0129 → 129
+    day_match = re.search(r"[_-]d(\d+)", stem, re.IGNORECASE)
+    day_val = int(day_match.group(1)) if day_match else None
+
+    # Extract run number e.g. run-02 → 2
+    run_match = re.search(r"run[_-](\d+)", stem, re.IGNORECASE)
+    run_val = int(run_match.group(1)) if run_match else None
+
+    # Search demo CSV first, then raw CSV
+    for df in (demo, raw):
+        if "subject_id" not in df.columns:
+            continue
+        df_sub = df[df["subject_id"].astype(str).str.upper() == subject_id]
+        if df_sub.empty:
+            continue
+        # Narrow by day if available
+        if day_val is not None and "day" in df_sub.columns:
+            day_rows = df_sub[df_sub["day"].astype(float, errors="ignore") == day_val]
+            if not day_rows.empty:
+                df_sub = day_rows
+        # Narrow by run if available
+        if run_val is not None and "run" in df_sub.columns:
+            run_rows = df_sub[df_sub["run"].astype(float, errors="ignore") == run_val]
+            if not run_rows.empty:
+                df_sub = run_rows
+        row = df_sub.iloc[0]
+        age_v = float(row["age"]) if "age" in df_sub.columns and pd.notna(row.get("age")) else float("nan")
+        sex_v = str(row["sex"]).strip() if "sex" in df_sub.columns and pd.notna(row.get("sex")) else "?"
+        return {
+            "subject_id": subject_id,
+            "age":        age_v,
+            "sex":        sex_v,
+            "MMSE":       float(row["MMSE"])  if "MMSE"   in df_sub.columns and pd.notna(row.get("MMSE"))   else float("nan"),
+            "CDRTOT":     float(row["CDRTOT"]) if "CDRTOT" in df_sub.columns and pd.notna(row.get("CDRTOT")) else float("nan"),
+        }
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Scan catalogue (demo subset that has .npz files on disk)
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
@@ -444,10 +571,79 @@ def get_model():
 
 
 # ===========================================================================
+# SESSION CATALOGUE — index the 50 raw & preprocessed session folders
+# ===========================================================================
+@st.cache_data(show_spinner=False)
+def build_session_catalogue():
+    """Return list of dicts describing each session that has BOTH raw and
+    preprocessed MRI on disk.  The session folder name (e.g. OAS30001_MR_d0129)
+    is used as the canonical key."""
+    sessions = []
+    if not RAW_MRI.exists() or not PREPROC.exists():
+        return sessions
+    raw_sessions  = {p.name: p for p in sorted(RAW_MRI.iterdir())  if p.is_dir()}
+    prep_sessions = {p.name: p for p in sorted(PREPROC.iterdir()) if p.is_dir()}
+    common = sorted(set(raw_sessions) & set(prep_sessions))
+    for name in common:
+        raw_dir  = raw_sessions[name]
+        prep_dir = prep_sessions[name]
+        # Find all run subfolders
+        for anat in sorted(raw_dir.iterdir()):
+            if not anat.is_dir():
+                continue
+            # raw NIfTI
+            niftis = list(anat.glob("*.nii.gz"))
+            jsons  = list(anat.glob("*.json"))
+            if not niftis:
+                continue
+            raw_nii  = niftis[0]
+            raw_json = jsons[0] if jsons else None
+            # corresponding preprocessed folder (same anat subfolder name)
+            prep_anat = prep_dir / anat.name
+            prep_npz  = None
+            prep_nii  = None
+            if prep_anat.exists():
+                npzs = list(prep_anat.glob("*.npz"))
+                niis = list(prep_anat.glob("*.nii.gz"))
+                prep_npz = npzs[0] if npzs else None
+                prep_nii = niis[0] if niis else None
+            # parse subject/session from the folder name
+            m = re.match(r"(OAS3\d+)_MR_d(\d+)", name)
+            subject_id = m.group(1) if m else name
+            day_val    = int(m.group(2)) if m else 0
+            sessions.append({
+                "session":   name,
+                "anat":      anat.name,
+                "label":     f"{name} / {anat.name}",
+                "subject_id": subject_id,
+                "day":       day_val,
+                "raw_nii":   str(raw_nii),
+                "raw_json":  str(raw_json) if raw_json else None,
+                "prep_npz":  str(prep_npz) if prep_npz else None,
+                "prep_nii":  str(prep_nii) if prep_nii else None,
+            })
+    return sessions
+
+
+@st.cache_data(show_spinner=False)
+def load_nifti_volume(nii_path: str) -> np.ndarray:
+    """Load a .nii.gz file and return its 3-D float32 data array."""
+    img  = nib.load(nii_path)
+    data = np.asarray(img.dataobj, dtype=np.float32)
+    # Squeeze any extra dims
+    while data.ndim > 3:
+        data = data[..., 0]
+    return data
+
+
+session_catalogue = build_session_catalogue()
+
+# ===========================================================================
 # TABS
 # ===========================================================================
-tab1, tab2, tab3, tab4 = st.tabs([
-    "Layer 1 · MRI Viewer",
+tab0, tab1, tab2, tab3, tab4 = st.tabs([
+    "Layer 0 · Raw MRI",
+    "Layer 1 · Preprocessed",
     "Layer 2 · Prediction",
     "Layer 3 · Brain Age Gap",
     "Layer 4 · Performance",
@@ -455,13 +651,236 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 
 # ===========================================================================
-# LAYER 1 — MRI Viewer & Scan Input
+# LAYER 0 — Raw MRI Viewer & Scan Selection
+# ===========================================================================
+with tab0:
+    st.markdown(
+        '<div class="layer-badge">Layer 0 — Raw MRI Viewer &amp; Scan Selection</div>',
+        unsafe_allow_html=True,
+    )
+
+    col_sel0, col_view0 = st.columns([1.15, 2.35], gap="large")
+
+    with col_sel0:
+        st.markdown('<div class="section-header">Select Scan</div>', unsafe_allow_html=True)
+
+        if not _NIBABEL_OK:
+            st.error("nibabel is not installed. Run: `pip install nibabel`")
+        elif not session_catalogue:
+            st.warning(
+                "No sessions found. Ensure the `raw mri/` and `preprocessed mri/` "
+                "folders exist alongside app.py."
+            )
+        else:
+            # Dropdown — group by session (show label)
+            sess_labels = [s["label"] for s in session_catalogue]
+            chosen_idx  = st.selectbox(
+                "Session / Run",
+                range(len(sess_labels)),
+                format_func=lambda i: sess_labels[i],
+                key="l0_sess_sel",
+            )
+            chosen_sess = session_catalogue[chosen_idx]
+
+            st.markdown("---")
+            st.markdown('<div class="section-header">Or Upload Raw MRI</div>', unsafe_allow_html=True)
+            raw_upload = st.file_uploader(
+                "Upload raw NIfTI (.nii.gz)",
+                type=["gz"],
+                help="Upload a raw T1-weighted .nii.gz file.",
+                key="l0_raw_upload",
+            )
+
+            st.markdown("---")
+            load_raw_btn = st.button(
+                "Load Selected Scan →",
+                type="primary",
+                use_container_width=True,
+                key="btn_load_raw",
+            )
+
+            if load_raw_btn:
+                if raw_upload is not None:
+                    # User-uploaded NIfTI
+                    try:
+                        raw_upload.seek(0)
+                        with io.BytesIO(raw_upload.read()) as buf:
+                            fh   = nib.FileHolder(fileobj=buf)
+                            img  = nib.Nifti1Image.from_file_map({"header": fh, "image": fh})
+                            vol0 = np.asarray(img.dataobj, dtype=np.float32)
+                        while vol0.ndim > 3:
+                            vol0 = vol0[..., 0]
+                        st.session_state["_raw_vol"]      = vol0
+                        st.session_state["_raw_label"]    = Path(raw_upload.name).stem
+                        st.session_state["_raw_json"]     = None
+                        st.session_state["_raw_sess"]     = None   # no linked session
+                        st.session_state["_raw_prep_npz"] = None
+                        st.session_state["_raw_prep_nii"] = None
+                        # wipe any prior linked preprocessed state
+                        st.session_state.pop("_volume", None)
+                        st.session_state.pop("_loaded_file_id", None)
+                        st.session_state.pop("_scan", None)
+                        st.session_state.pop("_pred_age", None)
+                        st.session_state.pop("_result", None)
+                        st.session_state.pop("_elapsed", None)
+                        st.success("Raw MRI loaded from upload.")
+                    except Exception as exc:
+                        st.error(f"Could not load NIfTI: {exc}")
+                else:
+                    # Load from catalogue
+                    try:
+                        vol0 = load_nifti_volume(chosen_sess["raw_nii"])
+                        st.session_state["_raw_vol"]      = vol0
+                        st.session_state["_raw_label"]    = chosen_sess["label"]
+                        st.session_state["_raw_json"]     = chosen_sess["raw_json"]
+                        st.session_state["_raw_sess"]     = chosen_sess
+                        st.session_state["_raw_prep_npz"] = chosen_sess["prep_npz"]
+                        st.session_state["_raw_prep_nii"] = chosen_sess["prep_nii"]
+                        # Pull metadata for subsequent layers
+                        meta0 = lookup_metadata_from_filename(
+                            Path(chosen_sess["raw_nii"]).stem.replace(".nii", "")
+                        )
+                        age0  = meta0["age"] if meta0 else float("nan")
+                        sex0  = meta0["sex"] if meta0 else "?"
+                        st.session_state["_scan_label"] = chosen_sess["label"]
+                        st.session_state["_scan_age"]   = age0
+                        st.session_state["_has_age"]    = not np.isnan(age0)
+                        st.session_state["_scan_sex"]   = (
+                            "Female" if sex0 == "F" else ("Male" if sex0 == "M" else "Unknown")
+                        )
+                        # Clear prior prediction state
+                        st.session_state.pop("_volume", None)
+                        st.session_state.pop("_loaded_file_id", None)
+                        st.session_state.pop("_scan", None)
+                        st.session_state.pop("_pred_age", None)
+                        st.session_state.pop("_result", None)
+                        st.session_state.pop("_elapsed", None)
+                        st.success(f"Loaded **{chosen_sess['label']}**. Navigate to Layer 1 to see the preprocessed volume.")
+                    except Exception as exc:
+                        st.error(f"Failed to load scan: {exc}")
+
+        # Acquisition metadata panel
+        if st.session_state.get("_raw_json"):
+            st.markdown("---")
+            st.markdown('<div class="section-header">Acquisition Metadata</div>', unsafe_allow_html=True)
+            try:
+                acq = json.loads(Path(st.session_state["_raw_json"]).read_text())
+                acq_items = [
+                    ("Manufacturer",       acq.get("Manufacturer", "—")),
+                    ("Model",              acq.get("ManufacturersModelName", "—")),
+                    ("Field Strength (T)", acq.get("MagneticFieldStrength", "—")),
+                    ("Acquisition Type",   acq.get("MRAcquisitionType", "—")),
+                    ("Sequence",           acq.get("SeriesDescription", "—")),
+                    ("TR (s)",             acq.get("RepetitionTime", "—")),
+                    ("TE (s)",             acq.get("EchoTime", "—")),
+                    ("TI (s)",             acq.get("InversionTime", "—")),
+                    ("Flip Angle (°)",     acq.get("FlipAngle", "—")),
+                    ("Slice Thickness",    acq.get("SliceThickness", "—")),
+                    ("Base Resolution",    acq.get("BaseResolution", "—")),
+                ]
+                for k, v in acq_items:
+                    st.markdown(
+                        f'<div class="kv"><span>{k}</span><span>{v}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+            except Exception:
+                pass
+
+    with col_view0:
+        raw_vol = st.session_state.get("_raw_vol", None)
+
+        if raw_vol is not None:
+            st.markdown('<div class="section-header">Orthogonal Slice Viewer — Raw T1w</div>', unsafe_allow_html=True)
+
+            # Normalise for display
+            vmin0 = float(np.percentile(raw_vol, 1))
+            vmax0 = float(np.percentile(raw_vol, 99))
+            disp0 = np.clip(raw_vol, vmin0, vmax0)
+
+            sx0, sy0, sz0 = disp0.shape
+            c1r, c2r, c3r = st.columns(3)
+            axi0 = c1r.slider("Axial (Z)",    0, sz0-1, sz0//2, key="l0_axi")
+            cor0 = c2r.slider("Coronal (Y)",  0, sy0-1, sy0//2, key="l0_cor")
+            sag0 = c3r.slider("Sagittal (X)", 0, sx0-1, sx0//2, key="l0_sag")
+
+            fig0 = plt.figure(figsize=(13, 4.4), constrained_layout=True, facecolor=CARD_BG)
+            gs0  = gridspec.GridSpec(1, 3, figure=fig0, wspace=0.06)
+            view0_data = [
+                ("Axial",    np.rot90(disp0[:, :, axi0]), f"z={axi0}"),
+                ("Coronal",  np.rot90(disp0[:, cor0, :]), f"y={cor0}"),
+                ("Sagittal", np.rot90(disp0[sag0, :, :]), f"x={sag0}"),
+            ]
+            for i, (title0, slc0, coord0) in enumerate(view0_data):
+                ax0v = fig0.add_subplot(gs0[i])
+                ax0v.set_facecolor("black")
+                ax0v.imshow(slc0, cmap="gray", interpolation="bilinear",
+                            aspect="auto", vmin=vmin0, vmax=vmax0)
+                ax0v.set_title(f"{title0}  ({coord0})", color=INK,
+                               fontsize=10, fontweight="medium", pad=6)
+                ax0v.axis("off")
+            st.pyplot(fig0, clear_figure=True)
+
+            lbl0 = st.session_state.get("_raw_label", "Raw MRI")
+            if st.session_state.get("_raw_prep_npz"):
+                st.info(
+                    f"Raw scan **{lbl0}** loaded. "
+                    "Navigate to **Layer 1 · Preprocessed** to inspect the skull-stripped, "
+                    "registered, z-scored volume and run brain-age inference."
+                )
+            else:
+                st.info(f"Raw scan **{lbl0}** loaded (no linked preprocessed file found).")
+
+            # Volume stats
+            with st.expander("Raw volume statistics", expanded=False):
+                svol = raw_vol[raw_vol > 0]
+                st.markdown(
+                    f'<div class="kv"><span>Shape</span><span>{raw_vol.shape[0]} × {raw_vol.shape[1]} × {raw_vol.shape[2]}</span></div>'
+                    f'<div class="kv"><span>Min / Max</span><span>{raw_vol.min():.1f} / {raw_vol.max():.1f}</span></div>'
+                    f'<div class="kv"><span>Mean (non-zero)</span><span>{svol.mean():.1f}</span></div>'
+                    f'<div class="kv"><span>Std (non-zero)</span><span>{svol.std():.1f}</span></div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.markdown('<div class="section-header">Orthogonal Slice Viewer — Raw T1w</div>', unsafe_allow_html=True)
+            st.markdown("""
+<div class="empty-state">
+  <div style="font-size: 2.2rem; margin-bottom: 0.6rem;">🧠</div>
+  <h3>Select a Raw MRI Scan</h3>
+  <p>Choose a session from the dropdown on the left (or upload a <code>.nii.gz</code> file),
+  then click <b>Load Selected Scan →</b> to view orthogonal slices of the raw T1-weighted volume.</p>
+</div>
+
+<div class="spec-box">
+  <b>Available data:</b>
+  <ul style="margin: 0.4rem 0 0.2rem 1.2rem; padding: 0;">
+    <li><b>50 sessions</b> from OASIS-3 subjects OAS30001–OAS30015</li>
+    <li>Raw T1w NIfTI (<code>.nii.gz</code>) + BIDS JSON sidecar</li>
+    <li>Paired skull-stripped preprocessed NPZ ready in Layer 1</li>
+  </ul>
+</div>
+""", unsafe_allow_html=True)
+
+
+# ===========================================================================
+# LAYER 1 — Preprocessed MRI Viewer & Scan Input
 # ===========================================================================
 with tab1:
     st.markdown(
-        '<div class="layer-badge">Layer 1 — MRI Viewer &amp; Scan Input</div>',
+        '<div class="layer-badge">Layer 1 — Preprocessed MRI &amp; Scan Metadata</div>',
         unsafe_allow_html=True,
     )
+
+    # ---- Auto-fetch preprocessed NPZ from Layer 0 session selection --------
+    _prep_npz_path = st.session_state.get("_raw_prep_npz", None)
+    if _prep_npz_path and st.session_state.get("_volume") is None:
+        try:
+            _prep_vol = load_volume(_prep_npz_path)
+            st.session_state["_volume"]         = np.squeeze(_prep_vol)
+            st.session_state["_loaded_file_id"] = f"raw_sess_{_prep_npz_path}"
+            st.session_state["_vsrc"]           = "catalogue"
+            st.session_state.setdefault("_scan_label", Path(_prep_npz_path).stem)
+        except Exception as _exc:
+            st.warning(f"Could not auto-load preprocessed NPZ: {_exc}")
 
     col_input, col_viewer = st.columns([1.15, 2.35], gap="large")
 
@@ -547,10 +966,26 @@ with tab1:
                 try:
                     uploaded_file.seek(0)
                     vol_loaded = parse_npz_bytes(uploaded_file.read())
+                    stem = Path(uploaded_file.name).stem
+                    # --- Auto-lookup metadata from CSV ---
+                    meta = lookup_metadata_from_filename(stem)
                     st.session_state["_volume"] = vol_loaded
                     st.session_state["_loaded_file_id"] = file_id
                     st.session_state["_vsrc"] = "upload"
-                    st.session_state["_scan_label"] = Path(uploaded_file.name).stem
+                    st.session_state["_scan_label"] = stem
+                    if meta:
+                        st.session_state["_scan_age"]  = meta["age"]
+                        st.session_state["_has_age"]   = not np.isnan(meta["age"])
+                        sex_raw = meta["sex"]
+                        st.session_state["_scan_sex"] = (
+                            "Female" if sex_raw == "F"
+                            else ("Male" if sex_raw == "M" else "Unknown")
+                        )
+                    else:
+                        # No match — leave defaults; user can fill manually
+                        st.session_state.setdefault("_scan_age", float("nan"))
+                        st.session_state.setdefault("_has_age", False)
+                        st.session_state.setdefault("_scan_sex", "Unknown")
                     # Reset prediction state
                     st.session_state.pop("_pred_age", None)
                     st.session_state.pop("_result", None)
@@ -563,6 +998,9 @@ with tab1:
             st.session_state.pop("_loaded_file_id", None)
             st.session_state.pop("_vsrc", None)
             st.session_state.pop("_scan", None)
+            st.session_state.pop("_scan_age", None)
+            st.session_state.pop("_has_age", None)
+            st.session_state.pop("_scan_sex", None)
             st.session_state.pop("_pred_age", None)
             st.session_state.pop("_result", None)
             st.session_state.pop("_elapsed", None)
@@ -844,10 +1282,33 @@ with tab2:
 
             st.success("Inference complete")
 
-            r1, r2, r3 = st.columns(3)
-            r1.metric("Predicted Brain Age", f"{pred_age:.1f} y")
-            r2.metric("Inference Latency",   f"{elapsed:.2f} s")
-            r3.metric("Checkpoint",          result.get("checkpoint", "m1_f0_s0"))
+            # Determine how many metric columns to show
+            chron_for_l2 = float("nan")
+            if "_scan" in st.session_state:
+                chron_for_l2 = st.session_state["_scan"].get("age", float("nan"))
+
+            if not np.isnan(chron_for_l2):
+                bag_for_l2 = pred_age - chron_for_l2
+                bag_sign   = "+" if bag_for_l2 >= 0 else ""
+                r1, r2, r3, r4 = st.columns(4)
+                r1.metric("Predicted Brain Age",  f"{pred_age:.1f} y")
+                r2.metric("Chronological Age",    f"{chron_for_l2:.1f} y")
+                r3.metric("Inference Latency",    f"{elapsed:.2f} s")
+                r4.metric("Checkpoint",           result.get("checkpoint", "m1_f0_s0"))
+                bag_col_l2 = POS_CLR if bag_for_l2 > 0.5 else (NEG_CLR if bag_for_l2 < -0.5 else AMBER)
+                st.markdown(
+                    f'<div style="margin-top:.5rem;padding:.5rem .9rem;background:{INFO_BG};'
+                    f'border-left:3px solid {bag_col_l2};border-radius:0 6px 6px 0;'
+                    f'font-size:.88rem;color:{INK};">'
+                    f'<b>Brain Age Gap (BAG):</b> {bag_sign}{bag_for_l2:.2f} y &nbsp;·&nbsp; '
+                    f'Abs. error: <b>{abs(bag_for_l2):.2f} y</b></div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                r1, r2, r3 = st.columns(3)
+                r1.metric("Predicted Brain Age", f"{pred_age:.1f} y")
+                r2.metric("Inference Latency",   f"{elapsed:.2f} s")
+                r3.metric("Checkpoint",          result.get("checkpoint", "m1_f0_s0"))
 
             # Illustrative probability distribution
             st.markdown(
