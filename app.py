@@ -37,104 +37,239 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Global CSS (kept short; colours and base font come from .streamlit/config.toml)
+# Theme state & styling tokens
 # ---------------------------------------------------------------------------
-st.markdown("""
+if "dark_mode" not in st.session_state:
+    st.session_state["dark_mode"] = True
+
+is_dark = st.session_state["dark_mode"]
+
+if is_dark:
+    PAGE_BG        = "#0B1020"
+    SURFACE_BG     = "#131F30"
+    SURFACE_BORDER = "#1E293B"
+    INK            = "#F1F5F9"
+    MUTED          = "#94A3B8"
+    RULE           = "#334155"
+    ACCENT         = "#38BDF8"   # luminous sky cyan
+    ACCENT2        = "#94A3B8"
+    POS_CLR        = "#F87171"   # vibrant coral red (older-looking / positive gap)
+    NEG_CLR        = "#34D399"   # emerald green (younger-looking / negative gap)
+    AMBER          = "#FBBF24"
+    GRID_CLR       = "#1E293B"
+    CARD_BG        = "#131F30"
+    INFO_BG        = "rgba(56, 189, 248, 0.08)"
+    INFO_BORDER    = "#38BDF8"
+    EMPTY_BG       = "rgba(19, 31, 48, 0.65)"
+    EMPTY_BORDER   = "#334155"
+    SPEC_BG        = "#131F30"
+    SPEC_BORDER    = "#1E293B"
+    CODE_BG        = "#1E293B"
+    CODE_CLR       = "#38BDF8"
+    CODE_BORDER    = "#334155"
+    SEQ_CMAP       = matplotlib.colors.LinearSegmentedColormap.from_list(
+        "dark_error", ["#38BDF8", "#FBBF24", "#F87171"], N=256
+    )
+else:
+    PAGE_BG        = "#FFFFFF"
+    SURFACE_BG     = "#F5F5F3"
+    SURFACE_BORDER = "#E1E3E6"
+    INK            = "#1F2328"
+    MUTED          = "#6B7178"
+    RULE           = "#B8BCC2"
+    ACCENT         = "#2F5D7C"   # classic navy accent
+    ACCENT2        = "#7A8087"
+    POS_CLR        = "#B5533C"   # muted red
+    NEG_CLR        = "#4F7F5A"   # muted green
+    AMBER          = "#8A6D1F"
+    GRID_CLR       = "#E3E5E8"
+    CARD_BG        = "#FFFFFF"
+    INFO_BG        = "rgba(197, 201, 206, 0.12)"
+    INFO_BORDER    = "#C5C9CE"
+    EMPTY_BG       = "#F9FAFB"
+    EMPTY_BORDER   = "#C5C9CE"
+    SPEC_BG        = "#FFFFFF"
+    SPEC_BORDER    = "#E1E3E6"
+    CODE_BG        = "#F0F2F4"
+    CODE_CLR       = "#2F5D7C"
+    CODE_BORDER    = "#E1E3E6"
+    SEQ_CMAP       = matplotlib.colors.ListedColormap(
+        matplotlib.colormaps["Blues"](np.linspace(0.3, 1.0, 256))
+    )
+
+st.markdown(f"""
 <style>
-.block-container { padding-top: 2.4rem; max-width: 1320px; }
-[data-testid="stHeader"] { background: transparent; }
-hr { margin: 1.4rem 0; border-color: #E1E3E6; }
+.block-container {{ padding-top: 2.2rem; max-width: 1320px; }}
+[data-testid="stHeader"] {{ background: transparent; }}
+hr {{ margin: 1.4rem 0; border-color: {SURFACE_BORDER}; }}
+
+/* Base container */
+.stApp {{
+    background-color: {PAGE_BG};
+    color: {INK};
+}}
 
 /* Page header */
-.hero { padding-bottom: 1rem; margin-bottom: 1.2rem; border-bottom: 1px solid #D5D8DC; }
-.eyebrow { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: #6B7178; }
-.hero h1 { margin: .2rem 0 .4rem 0; padding: 0; font-size: 1.75rem; font-weight: 600; color: #1F2328; }
-.hero p { margin: 0; color: #4A4F55; font-size: .95rem; max-width: 62rem; }
+.hero {{ padding-bottom: 0.8rem; margin-bottom: 1.2rem; border-bottom: 1px solid {SURFACE_BORDER}; }}
+.eyebrow {{ font-size: .75rem; letter-spacing: .09em; text-transform: uppercase; color: {ACCENT}; font-weight: 600; }}
+.hero h1 {{ margin: .2rem 0 .4rem 0; padding: 0; font-size: 1.85rem; font-weight: 700; color: {INK}; letter-spacing: -0.02em; }}
+.hero p {{ margin: 0; color: {MUTED}; font-size: .95rem; max-width: 62rem; line-height: 1.5; }}
 
 /* Layer label and section headings */
-.layer-badge { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase;
-               color: #6B7178; margin: .4rem 0 1rem 0; }
-.section-header { font-size: .98rem; font-weight: 600; color: #1F2328;
-                  padding-bottom: .35rem; margin-bottom: .8rem; border-bottom: 1px solid #D5D8DC; }
+.layer-badge {{
+    font-size: .75rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: {ACCENT};
+    background: {INFO_BG};
+    border: 1px solid {SURFACE_BORDER};
+    padding: 0.25rem 0.7rem;
+    border-radius: 9999px;
+    display: inline-block;
+    margin: .4rem 0 1rem 0;
+    font-weight: 600;
+}}
+.section-header {{
+    font-size: 1.02rem;
+    font-weight: 600;
+    color: {INK};
+    padding-bottom: .4rem;
+    margin-bottom: .85rem;
+    border-bottom: 1px solid {SURFACE_BORDER};
+}}
 
-/* Metrics: plain, no card */
-div[data-testid="stMetric"] { padding: .2rem 0 .6rem 0; }
-div[data-testid="stMetricLabel"] p { font-size: .8rem; color: #6B7178; }
-div[data-testid="stMetricValue"] { font-size: 1.5rem !important; font-weight: 600 !important; }
-div[data-testid="stMetricDelta"] { color: #6B7178 !important; font-size: .8rem; }
+/* Metrics */
+div[data-testid="stMetric"] {{
+    padding: .5rem .8rem;
+    background: {CARD_BG};
+    border: 1px solid {SURFACE_BORDER};
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}}
+div[data-testid="stMetricLabel"] p {{ font-size: .8rem; color: {MUTED}; font-weight: 500; }}
+div[data-testid="stMetricValue"] {{ font-size: 1.55rem !important; font-weight: 700 !important; color: {INK} !important; }}
+div[data-testid="stMetricDelta"] {{ color: {ACCENT} !important; font-size: .8rem; }}
 
-.stMarkdown code { color: #2F5D7C; background: #F0F2F4; }
+.stMarkdown code {{
+    color: {CODE_CLR};
+    background: {CODE_BG};
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid {CODE_BORDER};
+}}
 
 /* Notes, key-value rows */
-.info-box { border-left: 2px solid #C5C9CE; padding: .15rem 0 .15rem .85rem; margin-top: .6rem;
-            font-size: .88rem; line-height: 1.6; color: #3A3F45; }
-.kv { display: flex; justify-content: space-between; padding: .28rem 0; border-bottom: 1px solid #E1E3E6; }
-.kv span:first-child { color: #6B7178; font-size: .84rem; }
-.kv span:last-child { font-weight: 600; font-size: .86rem; color: #1F2328; }
-.bag-box { text-align: center; padding: 1.1rem; border: 1px solid #D5D8DC; border-radius: 3px; }
-.bag-box .lbl { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: #6B7178; margin-bottom: .35rem; }
-.bag-box .val { font-size: 2rem; font-weight: 600; }
-.bag-box .sub { font-size: .82rem; color: #6B7178; margin-top: .35rem; }
+.info-box {{
+    border-left: 3px solid {INFO_BORDER};
+    background: {INFO_BG};
+    padding: .55rem .85rem;
+    border-radius: 0 6px 6px 0;
+    margin-top: .6rem;
+    font-size: .88rem;
+    line-height: 1.6;
+    color: {INK};
+}}
+.kv {{
+    display: flex;
+    justify-content: space-between;
+    padding: .35rem 0;
+    border-bottom: 1px solid {SURFACE_BORDER};
+}}
+.kv span:first-child {{ color: {MUTED}; font-size: .84rem; }}
+.kv span:last-child {{ font-weight: 600; font-size: .86rem; color: {INK}; }}
+
+.bag-box {{
+    text-align: center;
+    padding: 1.3rem;
+    background: {CARD_BG};
+    border: 1px solid {SURFACE_BORDER};
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+}}
+.bag-box .lbl {{
+    font-size: .75rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: {MUTED};
+    margin-bottom: .35rem;
+    font-weight: 600;
+}}
+.bag-box .val {{ font-size: 2.15rem; font-weight: 700; }}
+.bag-box .sub {{ font-size: .84rem; color: {MUTED}; margin-top: .35rem; }}
+.bag-box .sub b {{ color: {INK} !important; }}
 
 /* Empty state and spec cards */
-.empty-state {
-    border: 1px dashed #C5C9CE;
-    border-radius: 6px;
+.empty-state {{
+    border: 1px dashed {EMPTY_BORDER};
+    border-radius: 8px;
     padding: 2.4rem 1.6rem;
     text-align: center;
-    background: #F9FAFB;
+    background: {EMPTY_BG};
     margin: 0.5rem 0 1.2rem 0;
-}
-.empty-state h3 {
+}}
+.empty-state h3 {{
     margin: 0 0 0.5rem 0;
     font-size: 1.15rem;
-    color: #1F2328;
-}
-.empty-state p {
-    color: #6B7178;
+    color: {INK};
+    font-weight: 600;
+}}
+.empty-state p {{
+    color: {MUTED};
     font-size: 0.9rem;
     margin: 0 auto;
     max-width: 34rem;
     line-height: 1.5;
-}
-.spec-box {
-    background: #FFFFFF;
-    border: 1px solid #E1E3E6;
-    border-radius: 4px;
-    padding: 0.9rem 1.1rem;
+}}
+.spec-box {{
+    background: {SPEC_BG};
+    border: 1px solid {SPEC_BORDER};
+    border-radius: 8px;
+    padding: 0.95rem 1.15rem;
     font-size: 0.85rem;
-    color: #3A3F45;
+    color: {INK};
     margin-top: 0.6rem;
-}
+}}
+.spec-box b {{ color: {INK}; }}
+
+/* Streamlit Tabs styling */
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 8px;
+    border-bottom: 1px solid {SURFACE_BORDER};
+}}
+.stTabs [data-baseweb="tab"] {{
+    padding: 8px 16px;
+    color: {MUTED};
+    border-radius: 6px 6px 0 0;
+    font-weight: 500;
+}}
+.stTabs [aria-selected="true"] {{
+    color: {ACCENT} !important;
+    border-bottom-color: {ACCENT} !important;
+    font-weight: 600 !important;
+}}
+
+/* Expanders */
+div[data-testid="stExpander"] {{
+    background: {CARD_BG};
+    border: 1px solid {SURFACE_BORDER};
+    border-radius: 8px;
+}}
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # Matplotlib defaults
 # ---------------------------------------------------------------------------
-INK     = "#1F2328"
-MUTED   = "#6B7178"
-RULE    = "#B8BCC2"
-ACCENT  = "#2F5D7C"   # single accent
-ACCENT2 = "#7A8087"   # neutral grey for secondary series
-POS_CLR = "#B5533C"   # muted red   (older-looking / positive gap)
-NEG_CLR = "#4F7F5A"   # muted green (younger-looking / negative gap)
-AMBER   = "#8A6D1F"
-# Sequential single-hue colormap for |error| (light = small, dark = large)
-SEQ_CMAP = matplotlib.colors.ListedColormap(
-    matplotlib.colormaps["Blues"](np.linspace(0.3, 1.0, 256))
-)
-
 plt.rcParams.update({
-    "figure.facecolor":  "white",
-    "axes.facecolor":    "white",
+    "figure.facecolor":  CARD_BG,
+    "axes.facecolor":    CARD_BG,
     "axes.edgecolor":    RULE,
     "axes.labelcolor":   INK,
     "axes.titlecolor":   INK,
     "xtick.color":       MUTED,
     "ytick.color":       MUTED,
     "text.color":        INK,
-    "grid.color":        "#E3E5E8",
+    "grid.color":        GRID_CLR,
     "grid.linewidth":    0.6,
     "font.family":       "sans-serif",
     "font.size":         9.5,
@@ -142,9 +277,15 @@ plt.rcParams.update({
 
 
 def styled_fig(w=7, h=4.5):
-    fig, ax = plt.subplots(figsize=(w, h))
+    fig, ax = plt.subplots(figsize=(w, h), facecolor=CARD_BG)
+    ax.set_facecolor(CARD_BG)
     ax.spines[["top", "right"]].set_visible(False)
     ax.spines[["left", "bottom"]].set_color(RULE)
+    ax.tick_params(colors=MUTED, labelsize=9)
+    ax.xaxis.label.set_color(MUTED)
+    ax.yaxis.label.set_color(MUTED)
+    ax.title.set_color(INK)
+    ax.grid(True, color=GRID_CLR, linewidth=0.6, alpha=0.7)
     return fig, ax
 
 
@@ -156,9 +297,12 @@ def fmt(v, d=2):
 
 
 # ---------------------------------------------------------------------------
-# Hero
+# Hero & Theme Control
 # ---------------------------------------------------------------------------
-st.markdown("""
+col_hero, col_theme = st.columns([4.4, 1.2])
+
+with col_hero:
+    st.markdown("""
 <div class="hero">
   <div class="eyebrow">Deep Learning · Structural MRI · OASIS-3</div>
   <h1>Brain Age Lab</h1>
@@ -169,6 +313,24 @@ st.markdown("""
   </p>
 </div>
 """, unsafe_allow_html=True)
+
+with col_theme:
+    st.markdown('<div style="display: flex; justify-content: flex-end; align-items: center; padding-top: 1.2rem;">', unsafe_allow_html=True)
+    cur_mode = st.session_state.get("dark_mode", True)
+    new_mode = st.toggle(
+        "🌙 Dark Mode" if cur_mode else "☀️ Light Mode",
+        value=cur_mode,
+        key="main_theme_toggle",
+    )
+    if new_mode != cur_mode:
+        st.session_state["dark_mode"] = new_mode
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with st.sidebar:
+    st.markdown("### 🎨 Display Preferences")
+    st.caption("Active Theme: **" + ("🌙 Dark Mode" if is_dark else "☀️ Light Mode") + "**")
+    st.markdown("---")
 
 
 # ---------------------------------------------------------------------------
@@ -522,7 +684,7 @@ with tab1:
             cor_idx = c2.slider("Coronal (Y)",  0, sy - 1, sy // 2, key="cor")
             sag_idx = c3.slider("Sagittal (X)", 0, sx - 1, sx // 2, key="sag")
 
-            fig = plt.figure(figsize=(13, 4.4), constrained_layout=True)
+            fig = plt.figure(figsize=(13, 4.4), constrained_layout=True, facecolor=CARD_BG)
             gs  = gridspec.GridSpec(1, 3, figure=fig, wspace=0.06)
 
             view_data = [
@@ -532,6 +694,7 @@ with tab1:
             ]
             for i, (title, slc, coord) in enumerate(view_data):
                 ax_v = fig.add_subplot(gs[i])
+                ax_v.set_facecolor(CARD_BG)
                 ax_v.imshow(slc, cmap="gray", interpolation="bilinear", aspect="auto")
                 ax_v.set_title(
                     f"{title}  ({coord})",
@@ -549,11 +712,11 @@ with tab1:
                 fig2, ax2 = styled_fig(11, 2.4)
                 ax2.plot(mid_row, color=ACCENT, linewidth=1.2)
                 ax2.fill_between(
-                    range(len(mid_row)), mid_row, alpha=0.12, color=ACCENT
+                    range(len(mid_row)), mid_row, alpha=0.15, color=ACCENT
                 )
                 ax2.set_xlabel("Voxel index (X)")
                 ax2.set_ylabel("Intensity (z-score)")
-                ax2.grid(True)
+                ax2.grid(True, color=GRID_CLR, alpha=0.6)
                 fig2.tight_layout()
                 st.pyplot(fig2, clear_figure=True)
 
@@ -650,7 +813,7 @@ with tab2:
             st.warning("No volume loaded — please upload a scan in **Layer 1** first.")
         else:
             st.markdown(
-                f'<p style="color:#6B7178;font-size:.88rem;">Volume shape: '
+                f'<p style="color:{MUTED};font-size:.88rem;">Volume shape: '
                 f'<code>{st.session_state["_volume"].shape}</code></p>',
                 unsafe_allow_html=True,
             )
@@ -708,7 +871,7 @@ with tab2:
             fig3, ax3 = styled_fig(10, 3.2)
             ax3.bar(
                 centers, pseudo_probs,
-                width=bin_step * 0.85, color=ACCENT, alpha=0.45,
+                width=bin_step * 0.85, color=ACCENT, alpha=0.5,
                 label="Probability mass",
             )
             ax3.axvline(
@@ -724,8 +887,8 @@ with tab2:
                     )
             ax3.set_xlabel("Age (years)")
             ax3.set_ylabel("Probability mass")
-            ax3.legend(frameon=False, fontsize=9)
-            ax3.grid(True, alpha=0.6)
+            ax3.legend(frameon=False, fontsize=9, labelcolor=INK)
+            ax3.grid(True, color=GRID_CLR, alpha=0.6)
             fig3.tight_layout()
             st.pyplot(fig3, clear_figure=True)
 
@@ -796,7 +959,7 @@ with tab3:
                     f'<div class="val" style="color:{bag_col};">'
                     f'{bag_sign}{bag_val:.2f} years</div>'
                     f'<div class="sub">Absolute error: '
-                    f'<b style="color:#1F2328;">{abs_err:.2f} y</b></div>'
+                    f'<b style="color:{INK};">{abs_err:.2f} y</b></div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -904,9 +1067,9 @@ with tab3:
             ax4.set_ylabel("Brain Age Gap (years)")
             ax4.set_title(
                 "BAG per Scan  (red = older-looking, green = younger-looking)",
-                fontsize=10, loc="left",
+                fontsize=10, loc="left", color=INK,
             )
-            ax4.grid(axis="y")
+            ax4.grid(axis="y", color=GRID_CLR)
             ax4.set_axisbelow(True)
             fig4.tight_layout()
             st.pyplot(fig4, clear_figure=True)
@@ -987,7 +1150,7 @@ with tab4:
         hi4 = float(max(plot_df["age"].max(), plot_df["predicted_age"].max()))
         ax5.plot(
             [lo4, hi4], [lo4, hi4], "--",
-            color=INK, linewidth=1.0, label="Perfect prediction",
+            color=MUTED, linewidth=1.1, label="Perfect prediction",
         )
         cb = fig5.colorbar(sc, ax=ax5, shrink=0.8, pad=0.02)
         cb.set_label("|Error| (years)", color=MUTED, fontsize=8)
@@ -1004,10 +1167,10 @@ with tab4:
                     zorder=5, marker="*", label=f"Active: {s4['label']}",
                 )
 
-        ax5.legend(frameon=False, fontsize=8.5)
+        ax5.legend(frameon=False, fontsize=8.5, labelcolor=INK)
         ax5.set_xlabel("Chronological Age (years)")
         ax5.set_ylabel("Predicted Age (years)")
-        ax5.grid(True)
+        ax5.grid(True, color=GRID_CLR)
         ax5.set_axisbelow(True)
         fig5.tight_layout()
         st.pyplot(fig5, clear_figure=True)
@@ -1020,7 +1183,7 @@ with tab4:
         )
         fig6, ax6 = styled_fig(6.4, 4.6)
         ax6.hist(err_vals, bins=40, color=ACCENT, alpha=0.75,
-                 edgecolor="white", linewidth=0.4)
+                 edgecolor=CARD_BG, linewidth=0.4)
         ax6.axvline(0, color=INK, linewidth=1.2, linestyle="--", label="Zero error")
         ax6.axvline(
             err_vals.mean(), color=POS_CLR, linewidth=1.4, linestyle=":",
@@ -1028,8 +1191,8 @@ with tab4:
         )
         ax6.set_xlabel("Predicted − Chronological Age (years)")
         ax6.set_ylabel("Scan count")
-        ax6.legend(frameon=False, fontsize=8.5)
-        ax6.grid(axis="y")
+        ax6.legend(frameon=False, fontsize=8.5, labelcolor=INK)
+        ax6.grid(axis="y", color=GRID_CLR)
         ax6.set_axisbelow(True)
         fig6.tight_layout()
         st.pyplot(fig6, clear_figure=True)
@@ -1083,11 +1246,11 @@ with tab4:
                 metrics["MAE"], color=POS_CLR, linewidth=1.2, linestyle="--",
                 label=f"Overall MAE: {metrics['MAE']:.2f} y",
             )
-            ax7.legend(frameon=True, facecolor="white", edgecolor="none",
-                       framealpha=1, fontsize=8.5, loc="upper right")
+            ax7.legend(frameon=True, facecolor=CARD_BG, edgecolor=RULE,
+                       framealpha=0.9, fontsize=8.5, loc="upper right", labelcolor=INK)
             ax7.set_xlabel("Age Group")
             ax7.set_ylabel("MAE (years)")
-            ax7.grid(axis="y")
+            ax7.grid(axis="y", color=GRID_CLR)
             ax7.set_axisbelow(True)
             fig7.tight_layout()
             st.pyplot(fig7, clear_figure=True)
@@ -1138,8 +1301,9 @@ with tab4:
             ax8.legend(
                 leg_lines, leg_labels,
                 frameon=False, fontsize=8.5, loc="upper right",
+                labelcolor=INK,
             )
-            ax8.grid(True, alpha=0.6)
+            ax8.grid(True, color=GRID_CLR, alpha=0.6)
             fig8.tight_layout()
             st.pyplot(fig8, clear_figure=True)
 
@@ -1162,7 +1326,7 @@ with tab4:
         ax9.axhline(0, color=INK, linewidth=1.0, linestyle="--")
         ax9.set_xlabel("Chronological Age (years)")
         ax9.set_ylabel("BAG (Predicted − Actual)")
-        ax9.grid(True)
+        ax9.grid(True, color=GRID_CLR)
         ax9.set_axisbelow(True)
         st.caption(
             f"Slope = {metrics['BAG_vs_age_slope']:.4f}  |  "

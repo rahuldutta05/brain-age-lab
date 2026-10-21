@@ -31,11 +31,15 @@ def render():
             iy = st.slider("Coronal slice", 0, volume.shape[1] - 1, volume.shape[1] // 2)
         with c:
             iz = st.slider("Sagittal slice", 0, volume.shape[0] - 1, volume.shape[0] // 2)
-        fig, axes = plt.subplots(1, 3, figsize=(10, 3.5), dpi=120)
-        axes[0].imshow(np.rot90(volume[:, :, ix]), cmap="gray"); axes[0].set_title("Axial")
-        axes[1].imshow(np.rot90(volume[:, iy, :]), cmap="gray"); axes[1].set_title("Coronal")
-        axes[2].imshow(np.rot90(volume[iz, :, :]), cmap="gray"); axes[2].set_title("Sagittal")
+        is_dark = st.session_state.get("dark_mode", True)
+        fig_bg = "#131F30" if is_dark else "white"
+        title_color = "#F1F5F9" if is_dark else "#1F2328"
+        fig, axes = plt.subplots(1, 3, figsize=(10, 3.5), dpi=120, facecolor=fig_bg)
+        axes[0].imshow(np.rot90(volume[:, :, ix]), cmap="gray"); axes[0].set_title("Axial", color=title_color)
+        axes[1].imshow(np.rot90(volume[:, iy, :]), cmap="gray"); axes[1].set_title("Coronal", color=title_color)
+        axes[2].imshow(np.rot90(volume[iz, :, :]), cmap="gray"); axes[2].set_title("Sagittal", color=title_color)
         for ax in axes:
+            ax.set_facecolor(fig_bg)
             ax.axis("off")
         fig.tight_layout()
         st.pyplot(fig, use_container_width=True)
