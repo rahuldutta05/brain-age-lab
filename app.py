@@ -666,13 +666,9 @@ with tab0:
 
         if not _NIBABEL_OK:
             st.error("nibabel is not installed. Run: `pip install nibabel`")
-        elif not session_catalogue:
-            st.warning(
-                "No sessions found. Ensure the `raw mri/` and `preprocessed mri/` "
-                "folders exist alongside app.py."
-            )
-        else:
-            # Dropdown — group by session (show label)
+        
+        chosen_sess = None
+        if session_catalogue:
             sess_labels = [s["label"] for s in session_catalogue]
             chosen_idx  = st.selectbox(
                 "Session / Run",
@@ -681,53 +677,58 @@ with tab0:
                 key="l0_sess_sel",
             )
             chosen_sess = session_catalogue[chosen_idx]
-
-            st.markdown("---")
-            st.markdown('<div class="section-header">Or Upload Raw MRI</div>', unsafe_allow_html=True)
-            raw_upload = st.file_uploader(
-                "Upload raw NIfTI (.nii.gz)",
-                type=["gz"],
-                help="Upload a raw T1-weighted .nii.gz file.",
-                key="l0_raw_upload",
+        else:
+            st.info(
+                "No preloaded sessions found on this server. "
+                "Upload a raw .nii.gz below to view orthogonal slices."
             )
 
-            st.markdown("---")
-            load_raw_btn = st.button(
-                "Load Selected Scan →",
-                type="primary",
-                use_container_width=True,
-                key="btn_load_raw",
-            )
+        st.markdown("---")
+        st.markdown('<div class="section-header">Or Upload Raw MRI</div>', unsafe_allow_html=True)
+        raw_upload = st.file_uploader(
+            "Upload raw NIfTI (.nii.gz)",
+            type=["gz"],
+            help="Upload a raw T1-weighted .nii.gz file.",
+            key="l0_raw_upload",
+        )
 
-            if load_raw_btn:
-                if raw_upload is not None:
-                    # User-uploaded NIfTI
-                    try:
-                        raw_upload.seek(0)
-                        with io.BytesIO(raw_upload.read()) as buf:
-                            fh   = nib.FileHolder(fileobj=buf)
-                            img  = nib.Nifti1Image.from_file_map({"header": fh, "image": fh})
-                            vol0 = np.asarray(img.dataobj, dtype=np.float32)
-                        while vol0.ndim > 3:
-                            vol0 = vol0[..., 0]
-                        st.session_state["_raw_vol"]      = vol0
-                        st.session_state["_raw_label"]    = Path(raw_upload.name).stem
-                        st.session_state["_raw_json"]     = None
-                        st.session_state["_raw_sess"]     = None   # no linked session
-                        st.session_state["_raw_prep_npz"] = None
-                        st.session_state["_raw_prep_nii"] = None
-                        # wipe any prior linked preprocessed state
-                        st.session_state.pop("_volume", None)
-                        st.session_state.pop("_loaded_file_id", None)
-                        st.session_state.pop("_scan", None)
-                        st.session_state.pop("_pred_age", None)
-                        st.session_state.pop("_result", None)
-                        st.session_state.pop("_elapsed", None)
-                        st.success("Raw MRI loaded from upload.")
-                    except Exception as exc:
-                        st.error(f"Could not load NIfTI: {exc}")
-                else:
-                    # Load from catalogue
+        st.markdown("---")
+        load_raw_btn = st.button(
+            "Load Selected Scan →",
+            type="primary",
+            use_container_width=True,
+            key="btn_load_raw",
+        )
+
+        if load_raw_btn:
+            if raw_upload is not None:
+                # User-uploaded NIfTI
+                try:
+                    raw_upload.seek(0)
+                    with io.BytesIO(raw_upload.read()) as buf:
+                        fh   = nib.FileHolder(fileobj=buf)
+                        img  = nib.Nifti1Image.from_file_map({"header": fh, "image": fh})
+                        vol0 = np.asarray(img.dataobj, dtype=np.float32)
+                    while vol0.ndim > 3:
+                        vol0 = vol0[..., 0]
+                    st.session_state["_raw_vol"]      = vol0
+                    st.session_state["_raw_label"]    = Path(raw_upload.name).stem
+                    st.session_state["_raw_json"]     = None
+                    st.session_state["_raw_sess"]     = None   # no linked session
+                    st.session_state["_raw_prep_npz"] = None
+                    st.session_state["_raw_prep_nii"] = None
+                    # wipe any prior linked preprocessed state
+                    st.session_state.pop("_volume", None)
+                    st.session_state.pop("_loaded_file_id", None)
+                    st.session_state.pop("_scan", None)
+                    st.session_state.pop("_pred_age", None)
+                    st.session_state.pop("_result", None)
+                    st.session_state.pop("_elapsed", None)
+                    st.success("Raw MRI loaded from upload.")
+                except Exception as exc:
+                    st.error(f"Could not load NIfTI: {exc}")
+            elif chosen_sess is not None:
+                # Load from catalogue
                     try:
                         vol0 = load_nifti_volume(chosen_sess["raw_nii"])
                         st.session_state["_raw_vol"]      = vol0
