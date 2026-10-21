@@ -12,6 +12,7 @@ import json
 import time
 import io
 import re
+import gzip
 
 import matplotlib
 matplotlib.use("Agg")
@@ -389,7 +390,7 @@ with col_theme:
     st.markdown('<div style="display: flex; justify-content: flex-end; align-items: center; padding-top: 1.2rem;">', unsafe_allow_html=True)
     cur_mode = st.session_state.get("dark_mode", True)
     new_mode = st.toggle(
-        "🌙 Dark Mode" if cur_mode else "☀️ Light Mode",
+        "Dark Mode" if cur_mode else "Light Mode",
         value=cur_mode,
         key="main_theme_toggle",
     )
@@ -399,8 +400,8 @@ with col_theme:
     st.markdown('</div>', unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown("### 🎨 Display Preferences")
-    st.caption("Active Theme: **" + ("🌙 Dark Mode" if is_dark else "☀️ Light Mode") + "**")
+    st.markdown("### Display Preferences")
+    st.caption("Active Theme: **" + ("Dark Mode" if is_dark else "Light Mode") + "**")
     st.markdown("---")
 
 
@@ -705,14 +706,17 @@ with tab0:
                 # User-uploaded NIfTI
                 try:
                     raw_upload.seek(0)
-                    with io.BytesIO(raw_upload.read()) as buf:
+                    raw_bytes = raw_upload.read()
+                    if raw_upload.name.endswith(".gz") or (len(raw_bytes) >= 2 and raw_bytes[:2] == b"\x1f\x8b"):
+                        raw_bytes = gzip.decompress(raw_bytes)
+                    with io.BytesIO(raw_bytes) as buf:
                         fh   = nib.FileHolder(fileobj=buf)
                         img  = nib.Nifti1Image.from_file_map({"header": fh, "image": fh})
                         vol0 = np.asarray(img.dataobj, dtype=np.float32)
                     while vol0.ndim > 3:
                         vol0 = vol0[..., 0]
                     st.session_state["_raw_vol"]      = vol0
-                    st.session_state["_raw_label"]    = Path(raw_upload.name).stem
+                    st.session_state["_raw_label"]    = Path(raw_upload.name).stem.replace(".nii", "")
                     st.session_state["_raw_json"]     = None
                     st.session_state["_raw_sess"]     = None   # no linked session
                     st.session_state["_raw_prep_npz"] = None
@@ -845,7 +849,6 @@ with tab0:
             st.markdown('<div class="section-header">Orthogonal Slice Viewer — Raw T1w</div>', unsafe_allow_html=True)
             st.markdown("""
 <div class="empty-state">
-  <div style="font-size: 2.2rem; margin-bottom: 0.6rem;">🧠</div>
   <h3>Select a Raw MRI Scan</h3>
   <p>Choose a session from the dropdown on the left (or upload a <code>.nii.gz</code> file),
   then click <b>Load Selected Scan →</b> to view orthogonal slices of the raw T1-weighted volume.</p>
@@ -899,7 +902,7 @@ with tab1:
         )
 
         # Quick demo & sample test helpers
-        with st.expander("🧪 Need a sample scan to test?", expanded=False):
+        with st.expander("Need a sample scan to test?", expanded=False):
             st.caption(
                 "Generate a synthetic 3D brain phantom to explore the viewer, "
                 "run prediction, and test the 4-layer pipeline without an external MRI file."
@@ -931,7 +934,7 @@ with tab1:
 
         # Optional: if catalogue scans happen to exist on disk, allow selection
         if catalogue:
-            with st.expander(f"📁 Select from disk catalogue ({len(catalogue)} scans)", expanded=False):
+            with st.expander(f"Select from disk catalogue ({len(catalogue)} scans)", expanded=False):
                 cat_labels = [
                     f"{r['label']} · {r['age']:.1f}y · {r['sex']}" if not np.isnan(r["age"]) else f"{r['label']} · {r['sex']}"
                     for r in catalogue
@@ -1171,7 +1174,6 @@ with tab1:
             )
             st.markdown("""
 <div class="empty-state">
-  <div style="font-size: 2.2rem; margin-bottom: 0.6rem;">🧠</div>
   <h3>Awaiting Preprocessed MRI Scan</h3>
   <p>Upload a preprocessed 3D T1-weighted volume in <code>.npz</code> format using the panel on the left to inspect orthogonal slices and estimate brain age.</p>
 </div>
@@ -1487,7 +1489,7 @@ with tab3:
             p_act = st.session_state["_pred_age"]
             bag_act = p_act - s_act["age"]
             active_row = pd.DataFrame([{
-                "mri_label": f"★ {s_act['label']} (Active)",
+                "mri_label": f"{s_act['label']} (Active)",
                 "subject_id": s_act["subject_id"],
                 "age": s_act["age"],
                 "predicted_age": p_act,
