@@ -572,57 +572,66 @@ def get_model():
 
 
 # ===========================================================================
-# SESSION CATALOGUE — index the 50 raw & preprocessed session folders
+# PREPROCESSED SCAN MATCHER & SESSION CATALOGUE
 # ===========================================================================
-@st.cache_data(show_spinner=False)
+def find_matching_preprocessed_npz(name_or_stem: str) -> Path | None:
+    """Find the matching .npz file in PREPROC based on filename or stem."""
+    if not PREPROC.exists():
+        return None
+    stem = Path(name_or_stem).stem.replace(".nii", "").replace("_preproc", "")
+    exact = list(PREPROC.rglob(f"{stem}_preproc.npz"))
+    if exact:
+        return exact[0]
+    m_sub = re.search(r"(OAS3\d+)", stem, re.IGNORECASE)
+    m_day = re.search(r"d(\d+)", stem, re.IGNORECASE)
+    m_run = re.search(r"run[_-](\d+)", stem, re.IGNORECASE)
+    if m_sub and m_day:
+        sub = m_sub.group(1).upper()
+        day = m_day.group(1)
+        cands = list(PREPROC.rglob(f"*{sub}*d{day}*.npz"))
+        if m_run and cands:
+            r = int(m_run.group(1))
+            run_cands = [
+                c for c in cands
+                if f"run-{r:02d}" in c.name or f"run_{r:02d}" in c.name or f"run-{r}" in c.name
+            ]
+            if run_cands:
+                return run_cands[0]
+        if cands:
+            return cands[0]
+    return None
+
+
 def build_session_catalogue():
     """Return list of dicts describing each session that has BOTH raw and
-    preprocessed MRI on disk.  The session folder name (e.g. OAS30001_MR_d0129)
-    is used as the canonical key."""
+    preprocessed MRI on disk."""
     sessions = []
     if not RAW_MRI.exists() or not PREPROC.exists():
         return sessions
-    raw_sessions  = {p.name: p for p in sorted(RAW_MRI.iterdir())  if p.is_dir()}
-    prep_sessions = {p.name: p for p in sorted(PREPROC.iterdir()) if p.is_dir()}
-    common = sorted(set(raw_sessions) & set(prep_sessions))
-    for name in common:
-        raw_dir  = raw_sessions[name]
-        prep_dir = prep_sessions[name]
-        # Find all run subfolders
-        for anat in sorted(raw_dir.iterdir()):
-            if not anat.is_dir():
-                continue
-            # raw NIfTI
-            niftis = list(anat.glob("*.nii.gz"))
-            jsons  = list(anat.glob("*.json"))
-            if not niftis:
-                continue
-            raw_nii  = niftis[0]
-            raw_json = jsons[0] if jsons else None
-            # corresponding preprocessed folder (same anat subfolder name)
-            prep_anat = prep_dir / anat.name
-            prep_npz  = None
-            prep_nii  = None
-            if prep_anat.exists():
-                npzs = list(prep_anat.glob("*.npz"))
-                niis = list(prep_anat.glob("*.nii.gz"))
-                prep_npz = npzs[0] if npzs else None
-                prep_nii = niis[0] if niis else None
-            # parse subject/session from the folder name
-            m = re.match(r"(OAS3\d+)_MR_d(\d+)", name)
-            subject_id = m.group(1) if m else name
-            day_val    = int(m.group(2)) if m else 0
-            sessions.append({
-                "session":   name,
-                "anat":      anat.name,
-                "label":     f"{name} / {anat.name}",
-                "subject_id": subject_id,
-                "day":       day_val,
-                "raw_nii":   str(raw_nii),
-                "raw_json":  str(raw_json) if raw_json else None,
-                "prep_npz":  str(prep_npz) if prep_npz else None,
-                "prep_nii":  str(prep_nii) if prep_nii else None,
-            })
+    npz_map = {p.stem.replace("_preproc", ""): p for p in PREPROC.rglob("*.npz")}
+    for raw_nii in sorted(RAW_MRI.rglob("*.nii.gz")):
+        stem = raw_nii.stem.replace(".nii", "")
+        prep_npz = npz_map.get(stem)
+        anat_name = raw_nii.parent.name
+        sess_name = raw_nii.parent.parent.name
+        jsons = list(raw_nii.parent.glob("*.json"))
+        raw_json = jsons[0] if jsons else None
+
+        m = re.match(r"(OAS3\d+)_MR_d(\d+)", sess_name)
+        subject_id = m.group(1) if m else sess_name
+        day_val    = int(m.group(2)) if m else 0
+
+        sessions.append({
+            "session":    sess_name,
+            "anat":       anat_name,
+            "label":      f"{sess_name} / {anat_name}",
+            "subject_id": subject_id,
+            "day":        day_val,
+            "raw_nii":    str(raw_nii),
+            "raw_json":   str(raw_json) if raw_json else None,
+            "prep_npz":   str(prep_npz) if prep_npz else None,
+            "prep_nii":   None,
+        })
     return sessions
 
 
@@ -715,20 +724,55 @@ with tab0:
                         vol0 = np.asarray(img.dataobj, dtype=np.float32)
                     while vol0.ndim > 3:
                         vol0 = vol0[..., 0]
-                    st.session_state["_raw_vol"]      = vol0
-                    st.session_state["_raw_label"]    = Path(raw_upload.name).stem.replace(".nii", "")
-                    st.session_state["_raw_json"]     = None
-                    st.session_state["_raw_sess"]     = None   # no linked session
-                    st.session_state["_raw_prep_npz"] = None
-                    st.session_state["_raw_prep_nii"] = None
-                    # wipe any prior linked preprocessed state
-                    st.session_state.pop("_volume", None)
-                    st.session_state.pop("_loaded_file_id", None)
+                    st.session_state["_raw_vol"]   = vol0
+                    raw_stem = Path(raw_upload.name).stem.replace(".nii", "")
+                    st.session_state["_raw_label"] = raw_stem
+                    st.session_state["_raw_sess"]  = None
+
+                    # Auto-link matching preprocessed NPZ
+                    matched_npz = find_matching_preprocessed_npz(raw_upload.name)
+                    if matched_npz:
+                        st.session_state["_raw_prep_npz"] = str(matched_npz)
+                        try:
+                            _prep_vol = load_volume(str(matched_npz))
+                            st.session_state["_volume"]         = np.squeeze(_prep_vol)
+                            st.session_state["_loaded_file_id"] = f"raw_sess_{matched_npz}"
+                            st.session_state["_vsrc"]           = "catalogue"
+                        except Exception:
+                            pass
+                    else:
+                        st.session_state["_raw_prep_npz"] = None
+                        st.session_state.pop("_volume", None)
+                        st.session_state.pop("_loaded_file_id", None)
+
+                    # Auto-link matching BIDS JSON
+                    if RAW_MRI.exists():
+                        matched_jsons = list(RAW_MRI.rglob(f"{raw_stem}.json"))
+                        st.session_state["_raw_json"] = str(matched_jsons[0]) if matched_jsons else None
+                    else:
+                        st.session_state["_raw_json"] = None
+
+                    # Auto-lookup metadata for subsequent layers
+                    meta0 = lookup_metadata_from_filename(raw_stem)
+                    age0  = meta0["age"] if meta0 else float("nan")
+                    sex0  = meta0["sex"] if meta0 else "?"
+                    st.session_state["_scan_label"] = raw_stem
+                    st.session_state["_scan_age"]   = age0
+                    st.session_state["_has_age"]    = not np.isnan(age0)
+                    st.session_state["_scan_sex"]   = (
+                        "Female" if sex0 == "F" else ("Male" if sex0 == "M" else "Unknown")
+                    )
+
+                    # Reset prediction state to run fresh on new scan
                     st.session_state.pop("_scan", None)
                     st.session_state.pop("_pred_age", None)
                     st.session_state.pop("_result", None)
                     st.session_state.pop("_elapsed", None)
-                    st.success("Raw MRI loaded from upload.")
+
+                    if matched_npz:
+                        st.success("Raw MRI loaded! Matching preprocessed volume found and linked.")
+                    else:
+                        st.success("Raw MRI loaded from upload.")
                 except Exception as exc:
                     st.error(f"Could not load NIfTI: {exc}")
             elif chosen_sess is not None:
@@ -793,6 +837,30 @@ with tab0:
 
     with col_view0:
         raw_vol = st.session_state.get("_raw_vol", None)
+
+        # Self-healing: if raw scan is active but prep_npz wasn't linked yet, auto-match now
+        if raw_vol is not None and not st.session_state.get("_raw_prep_npz"):
+            curr_stem = st.session_state.get("_raw_label", "")
+            matched_fallback = find_matching_preprocessed_npz(curr_stem)
+            if matched_fallback:
+                st.session_state["_raw_prep_npz"] = str(matched_fallback)
+                if st.session_state.get("_volume") is None:
+                    try:
+                        _pvol = load_volume(str(matched_fallback))
+                        st.session_state["_volume"]         = np.squeeze(_pvol)
+                        st.session_state["_loaded_file_id"] = f"raw_sess_{matched_fallback}"
+                        st.session_state["_vsrc"]           = "catalogue"
+                    except Exception:
+                        pass
+                if not st.session_state.get("_has_age", False):
+                    meta_fb = lookup_metadata_from_filename(curr_stem)
+                    age_fb  = meta_fb["age"] if meta_fb else float("nan")
+                    sex_fb  = meta_fb["sex"] if meta_fb else "?"
+                    st.session_state["_scan_age"] = age_fb
+                    st.session_state["_has_age"]  = not np.isnan(age_fb)
+                    st.session_state["_scan_sex"] = (
+                        "Female" if sex_fb == "F" else ("Male" if sex_fb == "M" else "Unknown")
+                    )
 
         if raw_vol is not None:
             st.markdown('<div class="section-header">Orthogonal Slice Viewer — Raw T1w</div>', unsafe_allow_html=True)
